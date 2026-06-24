@@ -10,4 +10,8 @@ public enum Config {
     public static let networkChangeDebounce: TimeInterval = 1.5
     public static let requestTimeout: TimeInterval = 10
     public static let notificationsEnabledByDefault = true
+
+    /// Lightweight connectivity probe (HTTP 204) for real reachability + latency.
+    public static let probeURL = URL(string: "https://www.gstatic.com/generate_204")!
+    public static let probeTimeout: TimeInterval = 5
 }

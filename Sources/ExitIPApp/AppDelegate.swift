@@ -7,8 +7,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let watcher = NetworkWatcher()
     private let fetcher: IPInfoFetching = URLSessionIPInfoFetcher()
     private let notifier = Notifier()
+    private let probe = ConnectivityProbe()
 
     private var model = ExitIPModel()
+    private var latencyMs: Int?
     private var notificationsEnabled = Config.notificationsEnabledByDefault
     private var lastCheckedDate: Date?
     private var pollTimer: Timer?
@@ -38,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handlePathChange(online: Bool) {
         debounceWorkItem?.cancel()
         guard online else {
+            latencyMs = nil
             apply(outcome: .offline)
             return
         }
@@ -50,12 +53,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refresh() {
         guard !isRefreshing else { return }
-        guard watcher.isOnline else { apply(outcome: .offline); return }
+        guard watcher.isOnline else { latencyMs = nil; apply(outcome: .offline); return }
         isRefreshing = true
         Task { @MainActor in
-            let info = await fetcher.fetch()
+            let (reachable, latency) = await probe.check()
+            self.latencyMs = reachable ? latency : nil
+            let info = reachable ? await self.fetcher.fetch() : nil
             self.isRefreshing = false
-            self.apply(outcome: info.map { .success($0) } ?? .lookupFailed)
+            self.apply(outcome: combinedOutcome(reachable: reachable, fetchedIP: info))
         }
     }
 
@@ -72,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.update(
             model: model,
             lastCheckedSecondsAgo: secondsAgo,
+            latencyMs: latencyMs,
             notificationsEnabled: notificationsEnabled,
             loginEnabled: LoginItem.isEnabled
         )

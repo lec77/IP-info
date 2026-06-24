@@ -19,7 +19,14 @@ public func menuBarTitle(for model: ExitIPModel) -> String {
         return "…"
     case .ok:
         guard let info = model.lastGoodIP else { return "…" }
-        return placeLabel(for: info)
+        // A normal reading always has a country flag. No flag means the geo
+        // lookup only partially succeeded (e.g. only the IP-only provider
+        // responded) — surface it as a warning instead of a bare IP that
+        // looks like a normal reading.
+        if info.countryCode.flatMap(flag(forCountryCode:)) != nil {
+            return placeLabel(for: info)
+        }
+        return "⚠︎ \(placeLabel(for: info))"
     case .failed(.offline):
         return "⚠︎ offline"
     case .failed(.lookupFailed):
@@ -49,4 +56,9 @@ public func lastCheckedText(secondsAgo: Int) -> String {
     if s < 60 { return "Last checked: \(s)s ago" }
     if s < 3600 { return "Last checked: \(s / 60)m ago" }
     return "Last checked: \(s / 3600)h ago"
+}
+
+public func latencyLine(ms: Int?) -> String {
+    guard let ms else { return "Latency: —" }
+    return "Latency: \(ms) ms"
 }

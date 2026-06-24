@@ -6,6 +6,7 @@ final class StatusItemController {
     private let statusItem: NSStatusItem
     private var model = ExitIPModel()
     private var lastCheckedSecondsAgo = 0
+    private var latencyMs: Int?
     private var notificationsEnabled = Config.notificationsEnabledByDefault
     private var loginEnabled = false
 
@@ -18,9 +19,10 @@ final class StatusItemController {
         render()
     }
 
-    func update(model: ExitIPModel, lastCheckedSecondsAgo: Int, notificationsEnabled: Bool, loginEnabled: Bool) {
+    func update(model: ExitIPModel, lastCheckedSecondsAgo: Int, latencyMs: Int?, notificationsEnabled: Bool, loginEnabled: Bool) {
         self.model = model
         self.lastCheckedSecondsAgo = lastCheckedSecondsAgo
+        self.latencyMs = latencyMs
         self.notificationsEnabled = notificationsEnabled
         self.loginEnabled = loginEnabled
         render()
@@ -45,6 +47,7 @@ final class StatusItemController {
             menu.addItem(disabledItem("No IP yet"))
         }
 
+        menu.addItem(disabledItem(latencyLine(ms: latencyMs)))
         menu.addItem(disabledItem(lastCheckedText(secondsAgo: lastCheckedSecondsAgo)))
         menu.addItem(.separator())
 

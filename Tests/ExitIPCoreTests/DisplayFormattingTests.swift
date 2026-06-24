@@ -19,13 +19,16 @@ final class DisplayFormattingTests: XCTestCase {
     }
 
     func testTitleOkCityNoFlag() {
+        // No country flag means geo lookup was incomplete -> mark it.
         let info = IPInfo(ip: "1.2.3.4", city: "San Jose")
-        XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .ok, lastGoodIP: info)), "San Jose")
+        XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .ok, lastGoodIP: info)), "⚠︎ San Jose")
     }
 
-    func testTitleOkNoFlagNoCityFallsBackToIP() {
+    func testTitleOkIPOnlyShowsWarning() {
+        // Only the IP-only provider (ipify) responded — geo degraded. Must be
+        // visibly marked, not a bare IP that looks like a normal reading.
         let info = IPInfo(ip: "1.2.3.4")
-        XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .ok, lastGoodIP: info)), "1.2.3.4")
+        XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .ok, lastGoodIP: info)), "⚠︎ 1.2.3.4")
     }
 
     func testTitleOffline() {
@@ -57,5 +60,10 @@ final class DisplayFormattingTests: XCTestCase {
         XCTAssertEqual(lastCheckedText(secondsAgo: 12), "Last checked: 12s ago")
         XCTAssertEqual(lastCheckedText(secondsAgo: 90), "Last checked: 1m ago")
         XCTAssertEqual(lastCheckedText(secondsAgo: 7200), "Last checked: 2h ago")
+    }
+
+    func testLatencyLine() {
+        XCTAssertEqual(latencyLine(ms: 85), "Latency: 85 ms")
+        XCTAssertEqual(latencyLine(ms: nil), "Latency: —")
     }
 }

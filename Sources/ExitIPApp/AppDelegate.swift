@@ -15,7 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastCheckedDate: Date?
     private var pollTimer: Timer?
     private var debounceWorkItem: DispatchWorkItem?
+    private var recheckWorkItem: DispatchWorkItem?
     private var isRefreshing = false
+    private var failureStreak = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller = StatusItemController() // create the status item after the app finishes launching
@@ -65,11 +67,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func apply(outcome: FetchOutcome) {
+        let (report, streak) = confirmOutcome(outcome, failureStreak: failureStreak, confirmAfter: Config.offlineConfirmations)
+        failureStreak = streak
+        guard report else {
+            // Tentative failure: keep the current display and re-check shortly to confirm.
+            scheduleRecheck()
+            return
+        }
         let (newModel, note) = reduce(model, applying: outcome)
         model = newModel
         if case .success = outcome { lastCheckedDate = Date() }
         rerender()
         if let note, notificationsEnabled { notifier.post(note) }
+    }
+
+    private func scheduleRecheck() {
+        recheckWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        recheckWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Config.offlineRecheckDelay, execute: work)
     }
 
     private func rerender() {

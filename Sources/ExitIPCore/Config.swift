@@ -14,4 +14,9 @@ public enum Config {
     /// Lightweight connectivity probe (HTTP 204) for real reachability + latency.
     public static let probeURL = URL(string: "https://www.gstatic.com/generate_204")!
     public static let probeTimeout: TimeInterval = 5
+
+    /// Offline hysteresis: require this many consecutive failed checks before
+    /// reporting offline; re-check this many seconds after a tentative failure.
+    public static let offlineConfirmations = 2
+    public static let offlineRecheckDelay: TimeInterval = 2
 }

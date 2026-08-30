@@ -1,10 +1,27 @@
-/// Combines the connectivity-probe result with the IP-lookup result into a single
-/// `FetchOutcome`. The probe's reachability is authoritative for online/offline;
-/// the IP lookup only refines a reachable connection into success vs. lookup-failed.
-public func combinedOutcome(reachable: Bool, fetchedIP: IPInfo?) -> FetchOutcome {
-    guard reachable else { return .offline }
-    if let info = fetchedIP { return .success(info) }
-    return .lookupFailed
+public enum ProbeVerdict: Sendable, Equatable {
+    case reachable
+    case captivePortal
+    case unreachable
+}
+
+/// Classifies the connectivity probe's HTTP status. The probe never follows
+/// redirects, so a 3xx (portal bouncing to its login page) or an unexpected 2xx
+/// (portal serving its own page) means a captive portal; no response at all
+/// means unreachable.
+public func probeVerdict(statusCode: Int?, expected: Int = Config.probeExpectedStatus) -> ProbeVerdict {
+    guard let statusCode else { return .unreachable }
+    return statusCode == expected ? .reachable : .captivePortal
+}
+
+/// Combines the connectivity-probe verdict with the exit-lookup result into a
+/// single `FetchOutcome`. The probe is authoritative for online/offline/portal;
+/// the lookup only refines a reachable connection into success vs. lookup-failed.
+public func combinedOutcome(probe: ProbeVerdict, fetched: ExitSnapshot?) -> FetchOutcome {
+    switch probe {
+    case .unreachable: return .failure(.offline)
+    case .captivePortal: return .failure(.captivePortal)
+    case .reachable: return fetched.map(FetchOutcome.success) ?? .failure(.lookupFailed)
+    }
 }
 
 /// Offline hysteresis. A success always reports immediately and resets the

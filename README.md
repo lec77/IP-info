@@ -1,22 +1,61 @@
 # IP-info
 
-A tiny native macOS **menu bar app** that shows your current **exit (public) IP** at a glance — with the country flag and city — and notifies you when it changes or when connectivity drops. Handy for confirming a VPN/proxy is up and exiting from the region you expect.
+A tiny native macOS **menu bar app** that shows your current **exit (public) IP** at a glance — with the country flag and city — and tells you when it changes, when connectivity drops, or when your VPN isn't doing what you think. Pin the country you expect to exit from and the menu bar turns ⛔ the moment traffic leaves elsewhere.
 
-> Menu bar: `🇺🇸 San Jose` · Dropdown: full IP (click to copy), location, ISP, last-checked, refresh, notifications toggle, launch-at-login, quit.
+> Menu bar: `🇩🇪 Berlin` · Dropdown: IPv4/IPv6 (click to copy), location, ISP, interface, latency, history, and controls.
 
 ## Features
 
 - **Live exit IP** in the menu bar (flag + city), updated the moment your network/VPN changes (via `NWPathMonitor`) plus a 60 s backstop poll.
-- **Dropdown details:** IP (click to copy), city/country, ISP, and how long ago it was last checked.
-- **Notifications** on exit-IP change, connectivity loss, and restore (toggle in the menu).
+- **Expected-exit guard.** Pin a country under *Expected exit ▸* (it lists the countries the app has seen, so pinning is one click while connected to the right place). The title becomes `⛔ 🇺🇸 San Jose` and you get a notification when the exit lands somewhere else — and an "Exit OK" when it's back.
+- **VPN leak detection.** The dropdown shows which interface carries your traffic (`Via: VPN tunnel (utun4)` / `Wi-Fi (en0)`). The app remembers the exit it saw while *not* on a tunnel; if a tunnel is up but the exit is still that ISP, you're warned.
+- **IPv4 + IPv6.** Both exits are looked up (hosts without IPv6 just show IPv4). If IPv6 exits in a different country than IPv4 — or, on a tunnel, via a different ISP — that's the classic IPv6 leak and it's flagged.
+- **History.** *History ▸* lists recent exit changes (`14:05  🇺🇸 → 🇩🇪  5.6.7.8`, click to copy) and the dropdown shows "Unchanged for 3h 12m". Persisted, so a change that happened while the app wasn't running is still recorded at launch.
+- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (with an *Open sign-in page…* item), and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown.
+- **Notifications** on exit change, connectivity loss/restore, captive portal, and every warning above (toggle in the menu; the setting persists).
+- **Pause monitoring** (`⏸` in the title) when you don't want the traffic — e.g. on a metered connection.
 - **Launch at login** toggle (via `SMAppService`).
-- **No dependencies, no API keys, menu-bar only** (no Dock icon). Looks up IP via `ipinfo.io` → `ipapi.co` → `ipify` (HTTPS, with fallback).
+- **No dependencies, no API keys, menu-bar only** (no Dock icon). Addresses come from `ipify` → `icanhazip` (per family); geo/ISP from `ipinfo.io` → `ipwho.is` → `ipapi.co`, looked up **only when an address is first seen** and cached, so the periodic poll never touches the rate-limited geo services.
+
+### Menu bar legend
+
+| Prefix | Meaning |
+|---|---|
+| `⛔` | Exit is not in the country you pinned |
+| `⚠︎` | Degraded (offline, captive portal, partial geo) or a leak warning — open the menu |
+| `⏸` | Monitoring paused |
+
+### Dropdown
+
+```
+IP: 203.0.113.42                 ← click to copy
+IPv6: 2001:db8::1                ← click to copy (only with IPv6 connectivity)
+Location: Berlin, Germany
+ISP: Example VPN GmbH
+Via: VPN tunnel (utun4)
+Latency: 32 ms
+Unchanged for 3h 12m
+Last checked: just now
+────────────────────────────
+⚠︎ IPv6 exits via 🇺🇸 Comcast — possible leak   ← only when something is wrong
+────────────────────────────
+Refresh now                 ⌘R
+Pause monitoring
+Expected exit            ▸   Off / 🇩🇪 Germany (current) / 🇺🇸 United States …
+History                  ▸   recent changes … / Clear history
+Notifications            ✓
+Launch at login
+────────────────────────────
+Quit                        ⌘Q
+```
 
 ## Architecture
 
-- `Sources/ExitIPCore` — pure, fully unit-tested logic (data model, provider JSON parsing, country/flag, display formatting, a state + notification reducer, the provider fallback chain). Swift 6 language mode.
-- `Sources/ExitIPApp` — a thin AppKit shell (status item, network watcher, fetcher wiring, notifier, login item).
-- `Tests/ExitIPCoreTests` — 36 unit tests covering the core logic.
+- `Sources/ExitIPCore` — pure, fully unit-tested logic, Swift 6 language mode: data model, provider JSON parsing, the address/geo resolver with its per-address geo cache, connectivity verdicts (reachable / captive portal / offline) + hysteresis, the state + notification reducer, exit-warning assessment (expected country, IPv6 mismatch, tunnel-but-home-ISP), change history, interface classification, and display formatting.
+- `Sources/ExitIPApp` — a thin AppKit shell: status item + menu, network watcher (`NWPathMonitor`, incl. which interface carries the default route), connectivity probe (HTTPS first; plain-HTTP fallback to distinguish a captive portal from being offline), fetcher wiring, notifier, UserDefaults-backed settings, login item.
+- `Tests/ExitIPCoreTests` — 122 unit tests covering the core logic.
+
+Persisted state lives in UserDefaults under `com.lec77.ipinfo` (notifications toggle, expected country, last untunneled exit, history).
 
 ## Build & run
 
@@ -35,7 +74,7 @@ Run the tests (XCTest needs full Xcode):
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
 ```
 
-The app icon is generated by `Assets/make-icon.swift`.
+The app icon is generated by `Assets/make-icon.swift`. Each check logs one line (`check: probe=… exit=…`) to the unified log — `log stream --predicate 'process == "IP-info"'` — handy when a network looks wrong.
 
 ## Sharing the built app
 

@@ -1,4 +1,5 @@
-public struct IPInfo: Equatable, Sendable {
+/// Geo/ISP details for one address (IPv4 or IPv6).
+public struct IPInfo: Equatable, Sendable, Codable {
     public var ip: String
     public var city: String?
     public var region: String?
@@ -20,5 +21,19 @@ public struct IPInfo: Equatable, Sendable {
         self.countryCode = countryCode
         self.countryName = countryName
         self.isp = isp
+    }
+}
+
+/// One observation of the machine's exit addresses.
+public struct ExitSnapshot: Equatable, Sendable {
+    /// The IPv4 exit when the host has one, otherwise the IPv6 exit.
+    public var primary: IPInfo
+    /// The IPv6 exit, when the host has IPv6 connectivity *in addition* to IPv4.
+    /// `nil` when there is no IPv6 path, or when IPv6 is already the primary.
+    public var ipv6: IPInfo?
+
+    public init(primary: IPInfo, ipv6: IPInfo? = nil) {
+        self.primary = primary
+        self.ipv6 = ipv6
     }
 }

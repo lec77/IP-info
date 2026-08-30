@@ -21,13 +21,25 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key><string>IP-info</string>
     <key>CFBundleDisplayName</key><string>IP-info</string>
     <key>CFBundleIdentifier</key><string>com.lec77.ipinfo</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleVersion</key><string>2</string>
+    <key>CFBundleShortVersionString</key><string>1.1</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleExecutable</key><string>IP-info</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSUIElement</key><true/>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <!-- The captive-portal fallback probe is plain HTTP on purpose. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>gstatic.com</key>
+            <dict>
+                <key>NSIncludesSubdomains</key><true/>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+            </dict>
+        </dict>
+    </dict>
 </dict>
 </plist>
 PLIST

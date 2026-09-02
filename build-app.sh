@@ -5,7 +5,7 @@
 #   ./build-app.sh --install    # …and copy to /Applications
 #
 # Environment:
-#   VERSION            CFBundleShortVersionString (default 1.1.0)
+#   VERSION            CFBundleShortVersionString (default 1.1.1)
 #   BUILD              CFBundleVersion (default: git commit count)
 #   CODESIGN_IDENTITY  "-" (ad-hoc, default) or a "Developer ID Application: …"
 #                      identity for distribution — see release.sh.
@@ -14,16 +14,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="IP-info"
 APP="$ROOT/$APP_NAME.app"
-VERSION="${VERSION:-1.1.0}"
+VERSION="${VERSION:-1.1.1}"
 BUILD="${BUILD:-$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)}"
 IDENTITY="${CODESIGN_IDENTITY:--}"
 
-BIN_DIR="$(swift build -c release --product ExitIPApp --show-bin-path)"
-swift build -c release --product ExitIPApp
+# Universal binary: build each arch separately and lipo them together.
+# (swift build --arch arm64 --arch x86_64 needs full Xcode; --triple works
+# with just the Command Line Tools.)
+for TRIPLE in arm64-apple-macosx x86_64-apple-macosx; do
+    swift build -c release --product ExitIPApp --triple "$TRIPLE"
+done
+UNIVERSAL_BIN="$ROOT/.build/ExitIPApp-universal"
+lipo -create -output "$UNIVERSAL_BIN" \
+    "$(swift build -c release --product ExitIPApp --triple arm64-apple-macosx --show-bin-path)/ExitIPApp" \
+    "$(swift build -c release --product ExitIPApp --triple x86_64-apple-macosx --show-bin-path)/ExitIPApp"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/ExitIPApp" "$APP/Contents/MacOS/$APP_NAME"
+cp "$UNIVERSAL_BIN" "$APP/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST

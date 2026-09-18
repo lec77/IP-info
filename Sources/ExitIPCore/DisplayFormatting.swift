@@ -20,8 +20,9 @@ public func menuBarTitle(for model: ExitIPModel, paused: Bool = false) -> String
     return paused ? "⏸ \(base)" : base
 }
 
-/// The "last checked" line's stand-in while a check is running.
-public let checkingText = "Checking…"
+/// The "last checked" line while a check is running — same "Label: value"
+/// grammar as the rest of the dropdown.
+public let checkingText = "Last checked: checking…"
 
 private func baseTitle(for model: ExitIPModel) -> String {
     switch model.phase {

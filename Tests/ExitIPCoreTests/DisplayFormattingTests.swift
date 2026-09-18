@@ -111,7 +111,7 @@ final class DisplayFormattingTests: XCTestCase {
     }
 
     func testCheckingText() {
-        XCTAssertEqual(checkingText, "Checking…")
+        XCTAssertEqual(checkingText, "Last checked: checking…")
     }
 
     func testLastCheckedText() {

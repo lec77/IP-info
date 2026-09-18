@@ -25,9 +25,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private var state = MenuState()
-    /// Spins beside the title while a check is in flight; lives inside the
+    /// Rotates beside the title while a check is in flight; lives inside the
     /// status item's button, over the space an (empty) leading image reserves.
-    private let spinner = SpinnerFactory.make()
+    private let spinner = RotatingSymbolView(pointSize: 12, color: .labelColor)
     private static let spinnerSlot = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { _ in true }
 
     var onRefresh: () -> Void = {}
@@ -61,10 +61,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         if state.checking {
             button.image = Self.spinnerSlot
             let slot = (button.cell as? NSButtonCell)?.imageRect(forBounds: button.bounds) ?? NSRect(x: 4, y: 3, width: 16, height: 16)
-            spinner.frame = NSRect(x: slot.midX - 8, y: slot.midY - 8, width: 16, height: 16)
-            spinner.startAnimation(nil)
+            let side = spinner.frame.size
+            spinner.frame = NSRect(x: slot.midX - side.width / 2, y: slot.midY - side.height / 2, width: side.width, height: side.height)
+            spinner.isAnimating = true
         } else {
-            spinner.stopAnimation(nil)
+            spinner.isAnimating = false
             button.image = nil
         }
     }
@@ -106,7 +107,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let checkedAgo = state.lastCheckedDate.map { Int(now.timeIntervalSince($0)) } ?? 0
         if state.checking {
             let item = disabledItem(checkingText)
-            item.view = SpinnerMenuItemView(title: checkingText)
+            item.view = CheckingMenuItemView(title: checkingText)
             menu.addItem(item)
         } else {
             menu.addItem(disabledItem(lastCheckedText(secondsAgo: checkedAgo)))

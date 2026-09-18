@@ -25,7 +25,7 @@ A tiny native macOS **menu bar app** that shows your current **exit (public) IP*
 | `⛔` | Exit is not in the country you pinned |
 | `⚠︎` | Degraded (offline, captive portal, tunnel down, partial geo) or a leak warning — open the menu |
 | `⏸` | Monitoring paused |
-| spinner | A check is running (the dropdown's *Last checked* line shows a spinner with *Checking…* meanwhile) |
+| rotating ↻ | A check is running (the dropdown's *Last checked* line shows the same mark meanwhile) |
 
 ### Dropdown
 

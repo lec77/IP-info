@@ -34,14 +34,16 @@ IP: 203.0.113.42                 ← click to copy
 IPv6: 2001:db8::1                ← click to copy (only with IPv6 connectivity)
 Location: Berlin, Germany
 ISP: Example VPN GmbH
+DNS: 🇩🇪 Example VPN GmbH        ← click to copy the resolver address
 Via: VPN tunnel (utun4)
-Latency: 32 ms
+Latency: 32 ms ▂▃▂▅▁
 Unchanged for 3h 12m
 Last checked: just now
 ────────────────────────────
 ⚠︎ IPv6 exits via 🇺🇸 Comcast — possible leak   ← only when something is wrong
 ────────────────────────────
 Refresh now                 ⌘R
+Open sign-in page…        [No portal]   ← pill: Sign-in required / No portal / Unknown
 Pause monitoring
 Expected exit            ▸   Off / 🇩🇪 Germany (current) / 🇺🇸 United States …
 History                  ▸   recent changes … / Clear history
@@ -55,7 +57,7 @@ Quit                        ⌘Q
 
 - `Sources/ExitIPCore` — pure, fully unit-tested logic, Swift 6 language mode: data model, provider JSON parsing, the address/geo resolver with its per-address geo cache, connectivity verdicts (reachable / captive portal / offline) + hysteresis, the state + notification reducer, exit-warning assessment (expected country, IPv6 mismatch, tunnel-but-home-ISP), change history, interface classification, and display formatting.
 - `Sources/ExitIPApp` — a thin AppKit shell: status item + menu, network watcher (`NWPathMonitor`, incl. which interface carries the default route), connectivity probe (HTTPS first; plain-HTTP fallback *bound to the physical interface* — bypassing any VPN/proxy TUN and its DNS hijack — to distinguish a captive portal from being offline and to catch the portal's redirect URL), default-route probe (finds a proxy's TUN device that `NWPathMonitor` doesn't list), fetcher wiring, notifier, UserDefaults-backed settings, login item.
-- `Tests/ExitIPCoreTests` — 122 unit tests covering the core logic.
+- `Tests/ExitIPCoreTests` — 162 unit tests covering the core logic.
 
 Persisted state lives in UserDefaults under `com.lec77.ipinfo` (notifications toggle, expected country, last untunneled exit, history).
 

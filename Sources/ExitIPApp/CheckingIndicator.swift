@@ -54,23 +54,27 @@ final class RotatingSymbolView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         symbolLayer.contentsScale = window?.backingScaleFactor ?? 2
+        retint() // the appearance (menu bar vs. menu) is only known once hosted
         // Core Animation drops animations from layers that left the screen.
         if isAnimating, symbolLayer.animation(forKey: Self.animationKey) == nil { startSpinning() }
     }
 
     /// Template symbols don't tint inside a bare CALayer, so the glyph is
-    /// rendered in the colour resolved for the current appearance.
+    /// rendered in the colour resolved for the current appearance. The colour
+    /// is resolved *now*, under this view's effective appearance (the menu
+    /// bar's, or the menu's): an image drawing handler runs later, when Core
+    /// Animation renders it, under whatever appearance is current then.
     private func retint() {
-        let size = image.size
-        let tinted = NSImage(size: size, flipped: false) { [image, color] rect in
+        var resolved = color.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance { resolved = color.cgColor }
+        let fixed = NSColor(cgColor: resolved) ?? color
+        let tinted = NSImage(size: image.size, flipped: false) { [image] rect in
             image.draw(in: rect)
-            color.set()
+            fixed.set()
             rect.fill(using: .sourceAtop)
             return true
         }
-        effectiveAppearance.performAsCurrentDrawingAppearance {
-            symbolLayer.contents = tinted
-        }
+        symbolLayer.contents = tinted
     }
 
     private func startSpinning() {

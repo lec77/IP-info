@@ -113,16 +113,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(disabledItem(lastCheckedText(secondsAgo: checkedAgo)))
         }
 
-        // Always offered: portal detection can miss (e.g. the portal only
-        // intercepts some traffic), and macOS's own assistant only checks on join.
-        let status = portalStatus(for: state.model, signIn: state.portalSignIn)
-        let signInItem = actionItem(signInMenuTitle(status), #selector(openSignIn), key: "")
-        signInItem.view = BadgedMenuItemView(title: signInItem.title, badge: signInBadge(status))
-        menu.addItem(signInItem)
-        if let signIn = state.portalSignIn, let hint = signInHint(signIn, viaTunnel: state.viaTunnel) {
-            menu.addItem(disabledItem(hint))
-        }
-
         let warnings = state.model.activeWarnings
         if let snapshot = state.model.lastGood, !warnings.isEmpty {
             menu.addItem(.separator())
@@ -133,6 +123,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(actionItem("Refresh now", #selector(refresh), key: "r"))
+
+        // Always offered: portal detection can miss (e.g. the portal only
+        // intercepts some traffic), and macOS's own assistant only checks on join.
+        let status = portalStatus(for: state.model, signIn: state.portalSignIn)
+        let signInItem = actionItem(signInMenuTitle(status), #selector(openSignIn), key: "")
+        signInItem.view = BadgedMenuItemView(title: signInItem.title, badge: signInBadge(status))
+        menu.addItem(signInItem)
+        if let signIn = state.portalSignIn, let hint = signInHint(signIn, viaTunnel: state.viaTunnel) {
+            menu.addItem(disabledItem(hint))
+        }
 
         let pause = actionItem("Pause monitoring", #selector(togglePause), key: "")
         pause.state = state.paused ? .on : .off

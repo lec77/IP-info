@@ -154,3 +154,18 @@ func ipWithCountryCode(_ info: IPInfo) -> String {
     }
     return info.ip
 }
+
+/// A routing comparison, not a general claim about VPN safety.
+public func exitComparisonText(model: ExitIPModel, onTunnel: Bool, direct: IPInfo?) -> String {
+    switch model.phase {
+    case .initial: return "Waiting for first check"
+    case .failed(.offline): return "Offline"
+    case .failed(.captivePortal): return "Network sign-in required"
+    case .failed(.tunnelDown): return "Tunnel is not responding"
+    case .failed(.lookupFailed): return "Exit lookup unavailable"
+    case .ok: break
+    }
+    guard onTunnel else { return "No tunnel detected" }
+    guard let direct, let primary = model.lastGoodIP else { return "Direct exit unknown" }
+    return isSameExit(primary, direct) ? "Detected exit matches direct connection" : "Detected exit differs from direct connection"
+}

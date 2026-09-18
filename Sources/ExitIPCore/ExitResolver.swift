@@ -106,7 +106,7 @@ public struct ExitResolver: Sendable {
     /// Geo for `ip`; degrades to an address-only `IPInfo` if every geo provider
     /// fails. Only complete answers (with a country) are cached, so a degraded
     /// reading is retried on the next poll.
-    private func geoInfo(for ip: String) async -> IPInfo {
+    public func geoInfo(for ip: String) async -> IPInfo {
         if let cached = await cache.lookup(ip) { return cached }
         guard var info = await geo.resolve(using: { await fetchGeo($0, ip) }) else {
             return IPInfo(ip: ip)

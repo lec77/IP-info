@@ -59,9 +59,9 @@ final class DisplayFormattingTests: XCTestCase {
 
     func testTitleUsesLoudestWarning() {
         XCTAssertEqual(menuBarTitle(for: ok(full, warnings: [.unexpectedCountry])), "⛔ 🇺🇸 San Jose")
-        XCTAssertEqual(menuBarTitle(for: ok(full, warnings: [.tunnelExitIsHome, .unexpectedCountry]), paused: true), "⏸ ⛔ 🇺🇸 San Jose")
+        XCTAssertEqual(menuBarTitle(for: ok(full, warnings: [.tunnelExitIsDirect, .unexpectedCountry]), paused: true), "⏸ ⛔ 🇺🇸 San Jose")
         XCTAssertEqual(menuBarTitle(for: ok(full, warnings: [.ipv6Mismatch])), "⚠︎ 🇺🇸 San Jose")
-        XCTAssertEqual(menuBarTitle(for: ok(full, warnings: [.tunnelExitIsHome])), "⚠︎ 🇺🇸 San Jose")
+        XCTAssertEqual(menuBarTitle(for: ok(full, warnings: [.tunnelExitIsDirect])), "⚠︎ 🇺🇸 San Jose")
     }
 
     func testWarningsIgnoredWhenNotOk() {
@@ -73,7 +73,7 @@ final class DisplayFormattingTests: XCTestCase {
 
     func testNoDoubleWarningPrefix() {
         let noFlag = IPInfo(ip: "1.2.3.4", city: "San Jose")
-        XCTAssertEqual(menuBarTitle(for: ok(noFlag, warnings: [.tunnelExitIsHome])), "⚠︎ San Jose")
+        XCTAssertEqual(menuBarTitle(for: ok(noFlag, warnings: [.tunnelExitIsDirect])), "⚠︎ San Jose")
     }
 
     func testSeverityOrderAndGlyphs() {
@@ -82,7 +82,7 @@ final class DisplayFormattingTests: XCTestCase {
         XCTAssertEqual(ExitWarning.Severity.caution.glyph, "⚠︎")
         XCTAssertEqual(ExitWarning.unexpectedCountry.severity, .critical)
         XCTAssertEqual(ExitWarning.ipv6Mismatch.severity, .caution)
-        XCTAssertEqual(ExitWarning.tunnelExitIsHome.severity, .caution)
+        XCTAssertEqual(ExitWarning.tunnelExitIsDirect.severity, .caution)
     }
 
     func testLines() {

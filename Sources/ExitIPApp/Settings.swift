@@ -8,7 +8,6 @@ final class SettingsStore {
     private enum Key {
         static let notificationsEnabled = "notificationsEnabled"
         static let expectedCountryCode = "expectedCountryCode"
-        static let homeExit = "homeExit"
         static let history = "history"
         static let pollInterval = "pollInterval"
     }
@@ -20,9 +19,6 @@ final class SettingsStore {
     }
     var expectedCountryCode: String? {
         didSet { if expectedCountryCode != oldValue { defaults.set(expectedCountryCode, forKey: Key.expectedCountryCode) } }
-    }
-    var homeExit: IPInfo? {
-        didSet { if homeExit != oldValue { defaults.set(Self.encode(homeExit), forKey: Key.homeExit) } }
     }
     var history: [IPChangeEvent] {
         didSet { if history != oldValue { defaults.set(Self.encode(history), forKey: Key.history) } }
@@ -36,7 +32,6 @@ final class SettingsStore {
         self.defaults = defaults
         notificationsEnabled = defaults.bool(forKey: Key.notificationsEnabled)
         expectedCountryCode = defaults.string(forKey: Key.expectedCountryCode)
-        homeExit = Self.decode(defaults.data(forKey: Key.homeExit))
         history = Self.decode(defaults.data(forKey: Key.history)) ?? []
         pollInterval = validPollInterval(defaults.object(forKey: Key.pollInterval) as? TimeInterval)
     }

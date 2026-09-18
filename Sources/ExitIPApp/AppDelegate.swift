@@ -5,6 +5,11 @@ import ExitIPCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: StatusItemController!
     private let watcher = NetworkWatcher()
+    private let directProbe = DirectExitProbe()
+    private var directExit: IPInfo?
+    private var directLastGood: IPInfo?
+    private var directCheckedDate: Date?
+    private var networkGeneration = 0
     private let resolver = ExitResolver.live()
     private let notifier = Notifier()
     private let probe = ConnectivityProbe()
@@ -73,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handlePathChange(online: Bool) {
+        networkGeneration += 1
+        directExit = nil
+        directLastGood = nil
+        directCheckedDate = nil
         debounceWorkItem?.cancel()
         guard !paused else { return }
         guard online else {
@@ -93,6 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard watcher.isOnline else { latencyMs = nil; apply(outcome: .failure(.offline)); return }
         isRefreshing = true
         rerender()
+        let generation = networkGeneration
+        let physical = watcher.physicalInterface.map { ActiveInterface(name: $0.name, kind: interfaceKind(name: $0.name, type: $0.type)) }
         Task { @MainActor in
             self.routeInterface = await RouteProbe.defaultRouteInterface()
             let includeIPv6 = shouldLookupIPv6(pathSupportsIPv6: watcher.supportsIPv6, interface: activeInterface)
@@ -103,6 +114,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.portalSignIn = verdict == .captivePortal ? ExitIPCore.portalSignIn(redirect: result.portalRedirect) : nil
             let includeDNS = dnsCheckDue(lastCheck: self.lastDNSCheck, now: Date())
             var snapshot = (verdict == .reachable) ? await self.resolver.resolve(includeIPv6: includeIPv6, includeDNS: includeDNS) : nil
+            let measuredDirect: IPInfo?
+            if viaTunnel, let fresh = snapshot {
+                if let measured = await directProbe.measure(interface: physical, matching: fresh.primary.ip) {
+                    measuredDirect = await resolver.geoInfo(for: measured.ip)
+                } else {
+                    measuredDirect = nil
+                }
+            } else {
+                measuredDirect = nil
+            }
+            guard generation == networkGeneration else {
+                isRefreshing = false
+                refresh()
+                return
+            }
+            directExit = measuredDirect
+            if let measuredDirect {
+                directLastGood = measuredDirect
+                directCheckedDate = Date()
+            }
             if let fresh = snapshot {
                 if fresh.dnsResolver != nil { self.lastDNSCheck = Date() }
                 // A new exit may well mean a new resolver: check again on the next poll.
@@ -131,7 +162,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if case .success(let snapshot) = outcome {
             lastCheckedDate = Date()
             settings.history = recordingExit(snapshot.primary, in: settings.history, at: Date())
-            settings.homeExit = homeExit(after: snapshot, via: activeInterface, previous: settings.homeExit)
         }
         let (newModel, notes) = reduce(model, applying: outcome, context: warningContext)
         model = newModel
@@ -142,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WarningContext(
             expectedCountryCode: settings.expectedCountryCode,
             onTunnel: viaTunnel,
-            homeExit: settings.homeExit
+            directExit: directExit
         )
     }
 
@@ -171,6 +201,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             checking: isRefreshing,
             portalSignIn: model.phase == .failed(.captivePortal) ? portalSignIn : nil,
             viaTunnel: viaTunnel,
+            physicalInterface: watcher.physicalInterface.map { ActiveInterface(name: $0.name, kind: interfaceKind(name: $0.name, type: $0.type)) },
+            directInfo: directLastGood,
+            directCheckedDate: directCheckedDate,
+            directFresh: directExit != nil,
             history: settings.history,
             expectedCountryCode: settings.expectedCountryCode,
             pollInterval: settings.pollInterval,

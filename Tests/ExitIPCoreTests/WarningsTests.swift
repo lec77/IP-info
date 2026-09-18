@@ -53,52 +53,38 @@ final class WarningsTests: XCTestCase {
 
     // MARK: tunnel vs home
 
-    func testTunnelExitIsHomeByISP() {
-        let ctx = WarningContext(onTunnel: true, homeExit: IPInfo(ip: "1.1.1.9", isp: "comcast"))
-        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us), context: ctx), [.tunnelExitIsHome])
+    func testTunnelWithDifferentAddressAtSameISPIsQuiet() {
+        let ctx = WarningContext(onTunnel: true, directExit: IPInfo(ip: "1.1.1.9", isp: "comcast"))
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us), context: ctx), [])
     }
 
     func testTunnelExitIsHomeByAddress() {
-        let ctx = WarningContext(onTunnel: true, homeExit: IPInfo(ip: "1.1.1.1"))
-        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us), context: ctx), [.tunnelExitIsHome])
+        let ctx = WarningContext(onTunnel: true, directExit: IPInfo(ip: "1.1.1.1"))
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us), context: ctx), [.tunnelExitIsDirect])
     }
 
     func testTunnelWithDifferentExitIsQuiet() {
-        let ctx = WarningContext(onTunnel: true, homeExit: us)
+        let ctx = WarningContext(onTunnel: true, directExit: us)
         XCTAssertEqual(assessWarnings(ExitSnapshot(primary: de), context: ctx), [])
     }
 
     func testHomeExitIgnoredOffTunnel() {
-        let ctx = WarningContext(onTunnel: false, homeExit: us)
+        let ctx = WarningContext(onTunnel: false, directExit: us)
         XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us), context: ctx), [])
     }
 
     func testIsSameExit() {
         XCTAssertTrue(isSameExit(IPInfo(ip: "1.1.1.1"), IPInfo(ip: "1.1.1.1", isp: "x")))
-        XCTAssertTrue(isSameExit(IPInfo(ip: "1.1.1.1", isp: "Comcast"), IPInfo(ip: "2.2.2.2", isp: " comcast ")))
+        XCTAssertFalse(isSameExit(IPInfo(ip: "1.1.1.1", isp: "Comcast"), IPInfo(ip: "2.2.2.2", isp: " comcast ")))
+        XCTAssertFalse(isSameExit(IPInfo(ip: ""), IPInfo(ip: "")))
         XCTAssertFalse(isSameExit(IPInfo(ip: "1.1.1.1", isp: "A"), IPInfo(ip: "2.2.2.2", isp: "B")))
         XCTAssertFalse(isSameExit(IPInfo(ip: "1.1.1.1"), IPInfo(ip: "2.2.2.2", isp: "B")))
     }
 
     func testAllWarningsTogetherInStableOrder() {
-        let ctx = WarningContext(expectedCountryCode: "DE", onTunnel: true, homeExit: us)
+        let ctx = WarningContext(expectedCountryCode: "DE", onTunnel: true, directExit: us)
         XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us, ipv6: deV6), context: ctx),
-                       [.unexpectedCountry, .ipv6Mismatch, .tunnelExitIsHome])
-    }
-
-    // MARK: remembering home
-
-    func testHomeExitTakenFromNonTunnelInterface() {
-        let wifi = ActiveInterface(name: "en0", kind: .wifi)
-        XCTAssertEqual(homeExit(after: ExitSnapshot(primary: us), via: wifi, previous: nil), us)
-        XCTAssertEqual(homeExit(after: ExitSnapshot(primary: de), via: wifi, previous: us), de)
-    }
-
-    func testHomeExitKeptOnTunnelOrUnknownInterface() {
-        let tunnel = ActiveInterface(name: "utun4", kind: .tunnel)
-        XCTAssertEqual(homeExit(after: ExitSnapshot(primary: de), via: tunnel, previous: us), us)
-        XCTAssertNil(homeExit(after: ExitSnapshot(primary: de), via: tunnel, previous: nil))
-        XCTAssertEqual(homeExit(after: ExitSnapshot(primary: de), via: nil, previous: us), us)
+                       [.unexpectedCountry, .ipv6Mismatch, .tunnelExitIsDirect])
     }
 
     // MARK: pin choices
@@ -130,7 +116,7 @@ final class WarningsTests: XCTestCase {
     }
 
     func testAllClearNotifiesOnce() {
-        let notes = warningNotifications(previous: [.tunnelExitIsHome], current: [],
+        let notes = warningNotifications(previous: [.tunnelExitIsDirect], current: [],
                                          snapshot: ExitSnapshot(primary: de), expectedCountryCode: nil)
         XCTAssertEqual(notes, [AppNotification(title: "Exit OK", body: "All exit checks pass again: 🇩🇪 Berlin · 2.2.2.2")])
         XCTAssertEqual(warningNotifications(previous: [], current: [], snapshot: ExitSnapshot(primary: de), expectedCountryCode: nil), [])
@@ -141,13 +127,13 @@ final class WarningsTests: XCTestCase {
                                       snapshot: ExitSnapshot(primary: de, ipv6: usV6), expectedCountryCode: nil)
         XCTAssertEqual(v6, [AppNotification(title: "Possible IPv6 leak",
                                             body: "IPv6 traffic exits via 🇺🇸 Comcast (2001:db8::1), not through your IPv4 exit.")])
-        let home = warningNotifications(previous: [], current: [.tunnelExitIsHome],
+        let home = warningNotifications(previous: [], current: [.tunnelExitIsDirect],
                                         snapshot: ExitSnapshot(primary: us), expectedCountryCode: nil)
-        XCTAssertEqual(home, [AppNotification(title: "Possible VPN leak",
-                                              body: "A tunnel is up, but the exit is your usual ISP (Comcast).")])
-        let homeNoISP = warningNotifications(previous: [], current: [.tunnelExitIsHome],
+        XCTAssertEqual(home, [AppNotification(title: "Exit matches direct connection",
+                                              body: "A tunnel is active, but the detected exit IP matches the measured direct exit (1.1.1.1). This request may be routed directly by your rules; it does not confirm a VPN-wide leak.")])
+        let homeNoISP = warningNotifications(previous: [], current: [.tunnelExitIsDirect],
                                              snapshot: ExitSnapshot(primary: IPInfo(ip: "1.1.1.1")), expectedCountryCode: nil)
-        XCTAssertEqual(homeNoISP.first?.body, "A tunnel is up, but the exit is your usual ISP.")
+        XCTAssertEqual(homeNoISP.first?.body, "A tunnel is active, but the detected exit IP matches the measured direct exit (1.1.1.1). This request may be routed directly by your rules; it does not confirm a VPN-wide leak.")
     }
 
     func testWarningLines() {
@@ -157,10 +143,10 @@ final class WarningsTests: XCTestCase {
                        "⚠︎ IPv6 exits via 🇺🇸 Comcast — possible leak")
         XCTAssertEqual(warningLine(.ipv6Mismatch, snapshot: ExitSnapshot(primary: de, ipv6: IPInfo(ip: "2001:db8::1")), expectedCountryCode: nil),
                        "⚠︎ IPv6 exits via 2001:db8::1 — possible leak")
-        XCTAssertEqual(warningLine(.tunnelExitIsHome, snapshot: ExitSnapshot(primary: us), expectedCountryCode: nil),
-                       "⚠︎ Tunnel up, but exit is your usual ISP (Comcast)")
-        XCTAssertEqual(warningLine(.tunnelExitIsHome, snapshot: ExitSnapshot(primary: IPInfo(ip: "1.1.1.1")), expectedCountryCode: nil),
-                       "⚠︎ Tunnel up, but exit is your usual ISP")
+        XCTAssertEqual(warningLine(.tunnelExitIsDirect, snapshot: ExitSnapshot(primary: us), expectedCountryCode: nil),
+                       "⚠︎ Tunnel active; exit matches measured direct IP (1.1.1.1)")
+        XCTAssertEqual(warningLine(.tunnelExitIsDirect, snapshot: ExitSnapshot(primary: IPInfo(ip: "1.1.1.1")), expectedCountryCode: nil),
+                       "⚠︎ Tunnel active; exit matches measured direct IP (1.1.1.1)")
     }
 
     // MARK: DNS leak

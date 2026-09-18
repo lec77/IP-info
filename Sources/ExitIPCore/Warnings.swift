@@ -1,3 +1,5 @@
+import Network
+
 /// Things that are wrong with an otherwise successful reading — the exit is not
 /// where it should be. Distinct from connectivity failures (`FailureReason`).
 /// Cases carry no payload: everything they describe is derivable from the
@@ -8,9 +10,9 @@ public enum ExitWarning: Sendable, Hashable {
     case unexpectedCountry
     /// IPv6 traffic exits somewhere other than IPv4 does — the classic VPN leak.
     case ipv6Mismatch
-    /// A tunnel interface carries the default route, yet the exit is the ISP
-    /// seen when no tunnel was up — traffic is not actually going through it.
-    case tunnelExitIsHome
+    /// A tunnel is active but the primary exit matches a fresh, interface-bound
+    /// direct measurement. Split routing can intentionally produce this result.
+    case tunnelExitIsDirect
     /// DNS queries are answered by a resolver in a different country than the
     /// exit — name lookups are bypassing the tunnel.
     case dnsLeak
@@ -31,7 +33,7 @@ public enum ExitWarning: Sendable, Hashable {
     public var severity: Severity {
         switch self {
         case .unexpectedCountry: return .critical
-        case .ipv6Mismatch, .tunnelExitIsHome, .dnsLeak: return .caution
+        case .ipv6Mismatch, .tunnelExitIsDirect, .dnsLeak: return .caution
         }
     }
 }
@@ -41,13 +43,14 @@ public struct WarningContext: Sendable {
     public var expectedCountryCode: String?
     /// Whether the default route currently goes through a tunnel interface.
     public var onTunnel: Bool
-    /// The exit last seen while *not* on a tunnel — i.e. the plain ISP connection.
-    public var homeExit: IPInfo?
+    /// Fresh direct measurement for the same address family and network as the
+    /// snapshot. Nil means unavailable; historical readings must not be used.
+    public var directExit: IPInfo?
 
-    public init(expectedCountryCode: String? = nil, onTunnel: Bool = false, homeExit: IPInfo? = nil) {
+    public init(expectedCountryCode: String? = nil, onTunnel: Bool = false, directExit: IPInfo? = nil) {
         self.expectedCountryCode = expectedCountryCode
         self.onTunnel = onTunnel
-        self.homeExit = homeExit
+        self.directExit = directExit
     }
 }
 
@@ -66,8 +69,8 @@ public func assessWarnings(_ snapshot: ExitSnapshot, context: WarningContext) ->
         warnings.append(.ipv6Mismatch)
     }
 
-    if context.onTunnel, let home = context.homeExit, isSameExit(primary, home) {
-        warnings.append(.tunnelExitIsHome)
+    if context.onTunnel, let direct = context.directExit, isSameExit(primary, direct) {
+        warnings.append(.tunnelExitIsDirect)
     }
 
     // Unknown country on either side is not a mismatch.
@@ -93,25 +96,17 @@ private func ipv6Disagrees(_ v6: IPInfo, with v4: IPInfo, onTunnel: Bool) -> Boo
     return false
 }
 
-/// Same address, or (both known) the same ISP.
+/// Only an identical address counts. Residential proxies and direct exits
+/// can share an ISP without sharing an exit.
 public func isSameExit(_ a: IPInfo, _ b: IPInfo) -> Bool {
-    if a.ip == b.ip { return true }
-    if let x = normalizedISP(a.isp), let y = normalizedISP(b.isp) { return x == y }
+    if let x = IPv4Address(a.ip), let y = IPv4Address(b.ip) { return x == y }
+    if let x = IPv6Address(a.ip), let y = IPv6Address(b.ip) { return x == y }
     return false
 }
 
 private func normalizedISP(_ isp: String?) -> String? {
     guard let isp = isp?.trimmingCharacters(in: .whitespaces).lowercased(), !isp.isEmpty else { return nil }
     return isp
-}
-
-/// The exit to remember as "home" (the plain ISP connection) after a good
-/// reading: the current exit when the default route is a known non-tunnel
-/// interface, otherwise whatever was remembered before — an unknown interface
-/// might be a tunnel.
-public func homeExit(after snapshot: ExitSnapshot, via interface: ActiveInterface?, previous: IPInfo?) -> IPInfo? {
-    guard let interface, interface.kind != .tunnel else { return previous }
-    return snapshot.primary
 }
 
 /// Countries offered for pinning: the current exit, the pinned one, and every
@@ -151,10 +146,10 @@ private func notification(for warning: ExitWarning, snapshot: ExitSnapshot, expe
             title: "Possible IPv6 leak",
             body: "IPv6 traffic exits \(via), not through your IPv4 exit."
         )
-    case .tunnelExitIsHome:
+    case .tunnelExitIsDirect:
         return AppNotification(
-            title: "Possible VPN leak",
-            body: "A tunnel is up, but the exit is your usual ISP\(ispSuffix(snapshot.primary.isp))."
+            title: "Exit matches direct connection",
+            body: "A tunnel is active, but the detected exit IP matches the measured direct exit (\(snapshot.primary.ip)). This request may be routed directly by your rules; it does not confirm a VPN-wide leak."
         )
     case .dnsLeak:
         let via = snapshot.dnsResolver.map { "via \(exitPlace($0)) (\($0.ip))" } ?? "elsewhere"
@@ -174,17 +169,13 @@ public func warningLine(_ warning: ExitWarning, snapshot: ExitSnapshot, expected
     case .ipv6Mismatch:
         let via = snapshot.ipv6.map { "via \(exitPlace($0))" } ?? "elsewhere"
         text = "IPv6 exits \(via) — possible leak"
-    case .tunnelExitIsHome:
-        text = "Tunnel up, but exit is your usual ISP\(ispSuffix(snapshot.primary.isp))"
+    case .tunnelExitIsDirect:
+        text = "Tunnel active; exit matches measured direct IP (\(snapshot.primary.ip))"
     case .dnsLeak:
         let via = snapshot.dnsResolver.map { "via \(exitPlace($0))" } ?? "elsewhere"
         text = "DNS resolves \(via) — possible leak"
     }
     return "\(warning.severity.glyph) \(text)"
-}
-
-private func ispSuffix(_ isp: String?) -> String {
-    isp.map { " (\($0))" } ?? ""
 }
 
 /// "🇺🇸 Comcast", "🇺🇸", "Comcast", or the address.

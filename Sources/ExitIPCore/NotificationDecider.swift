@@ -43,10 +43,14 @@ public func reassess(
     guard model.phase == .ok, let snapshot = model.lastGood else { return (model, []) }
     var updated = model
     updated.warnings = assessWarnings(snapshot, context: context)
-    let notes = warningNotifications(
+    var notes = warningNotifications(
         previous: model.warnings, current: updated.warnings,
         snapshot: snapshot, expectedCountryCode: context.expectedCountryCode
     )
+    // An unavailable direct measurement is not evidence of recovery.
+    if context.onTunnel && context.directExit == nil && model.warnings.contains(.tunnelExitIsDirect) {
+        notes.removeAll { $0.title == "Exit OK" }
+    }
     return (updated, notes)
 }
 

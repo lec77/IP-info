@@ -8,11 +8,12 @@ A tiny native macOS **menu bar app** that shows your current **exit (public) IP*
 
 - **Live exit IP** in the menu bar (flag + city), updated the moment your network/VPN changes (via `NWPathMonitor`) plus a 60 s backstop poll.
 - **Expected-exit guard.** Pin a country under *Expected exit ▸* (it lists the countries the app has seen, so pinning is one click while connected to the right place). The title becomes `⛔ 🇺🇸 San Jose` and you get a notification when the exit lands somewhere else — and an "Exit OK" when it's back.
-- **VPN leak detection.** The dropdown shows which interface carries your traffic (`Via: VPN tunnel (utun4)` / `Wi-Fi (en0)`). The app remembers the exit it saw while *not* on a tunnel; if a tunnel is up but the exit is still that ISP, you're warned.
+- **VPN leak detection.** The dropdown shows which interface carries your traffic (`Via: VPN tunnel (utun1500)` / `Wi-Fi (en0)`), found by asking the routing table directly, so a proxy's TUN device (Clash, Surge, …) that `NWPathMonitor` doesn't list is still seen. The app remembers the exit it saw while *not* on a tunnel; if a tunnel is up but the exit is still that ISP, you're warned.
 - **IPv4 + IPv6.** Both exits are looked up (hosts without IPv6 just show IPv4). If IPv6 exits in a different country than IPv4 — or, on a tunnel, via a different ISP — that's the classic IPv6 leak and it's flagged.
+- **DNS leak detection.** Every fifth poll asks an authoritative server which resolver looked up a one-off name (`DNS: 🇺🇸 Google LLC` in the dropdown); a resolver in a different country than the exit is flagged.
 - **History.** *History ▸* lists recent exit changes (`14:05  🇺🇸 → 🇩🇪  5.6.7.8`, click to copy) and the dropdown shows "Unchanged for 3h 12m". Persisted, so a change that happened while the app wasn't running is still recorded at launch.
-- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the sign-in item then reads *Sign-in required — open portal page (host)…* and opens the portal's own login URL, warning when a VPN/proxy tunnel would swallow it; the item is always available and otherwise says whether a portal was detected), and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown.
-- **Notifications** on exit change, connectivity loss/restore, captive portal, and every warning above (toggle in the menu; the setting persists).
+- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the *Open sign-in page…* item is always there with a coloured status pill — *Sign-in required* / *No portal* / *Unknown* — and opens the portal's own login URL, warning when a VPN/proxy tunnel would swallow it), `⚠︎ tunnel down` when the physical network works but nothing gets through the VPN/proxy tunnel, and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown with a sparkline of the last 12 checks.
+- **Notifications** on exit change, connectivity loss/restore, captive portal (with an *Open sign-in page* button), tunnel down, and every warning above (toggle in the menu; the setting persists).
 - **Pause monitoring** (`⏸` in the title) when you don't want the traffic — e.g. on a metered connection.
 - **Launch at login** toggle (via `SMAppService`).
 - **No dependencies, no API keys, menu-bar only** (no Dock icon). Addresses come from `ipify` → `icanhazip` (per family); geo/ISP from `ipinfo.io` → `ipwho.is` → `ipapi.co`, looked up **only when an address is first seen** and cached, so the periodic poll never touches the rate-limited geo services.
@@ -22,7 +23,7 @@ A tiny native macOS **menu bar app** that shows your current **exit (public) IP*
 | Prefix | Meaning |
 |---|---|
 | `⛔` | Exit is not in the country you pinned |
-| `⚠︎` | Degraded (offline, captive portal, partial geo) or a leak warning — open the menu |
+| `⚠︎` | Degraded (offline, captive portal, tunnel down, partial geo) or a leak warning — open the menu |
 | `⏸` | Monitoring paused |
 
 ### Dropdown

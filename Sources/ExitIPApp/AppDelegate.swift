@@ -13,17 +13,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model = ExitIPModel()
     private var paused = false
     private var latencyMs: Int?
+    /// Latency of the last few checks, oldest first (nil = no latency that check).
+    private var latencyHistory: [Int?] = []
     /// Sign-in target from the last probe that saw a portal; shown while the
     /// model is in the portal state.
     private var portalSignIn: PortalSignIn?
-    /// Whether the default route currently goes through a tunnel, per the last probe.
-    private var viaTunnel = false
+    /// The interface actually carrying the default route, per the last check.
+    /// `NWPathMonitor` doesn't list a proxy's TUN device, so this comes from
+    /// `RouteProbe` and takes precedence over the watcher's answer.
+    private var routeInterface: ActiveInterface?
+
+    private var activeInterface: ActiveInterface? { routeInterface ?? watcher.interface }
+    private var viaTunnel: Bool { activeInterface?.kind == .tunnel }
     private var lastCheckedDate: Date?
     private var pollTimer: Timer?
     private var debounceWorkItem: DispatchWorkItem?
     private var recheckWorkItem: DispatchWorkItem?
     private var isRefreshing = false
     private var failureStreak = 0
+    /// Polls since the last DNS-resolver check; the first check always runs one.
+    private var pollsSinceDNSCheck = Config.dnsCheckEveryPolls
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller = StatusItemController() // create the status item after the app finishes launching
@@ -34,7 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onSetExpectedCountry = { [weak self] code in self?.setExpectedCountry(code) }
         controller.onClearHistory = { [weak self] in self?.clearHistory() }
         controller.onOpenSignIn = { url in NSWorkspace.shared.open(url) }
+        notifier.onOpenSignIn = { [weak self] in self?.openSignIn() }
 
+        notifier.activate()
         if settings.notificationsEnabled { notifier.requestAuthorization() }
 
         watcher.onPathChange = { [weak self] online in
@@ -54,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !paused else { return }
         guard online else {
             latencyMs = nil
+            routeInterface = nil
             apply(outcome: .failure(.offline))
             return
         }
@@ -68,18 +80,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !paused, !isRefreshing else { return }
         guard watcher.isOnline else { latencyMs = nil; apply(outcome: .failure(.offline)); return }
         isRefreshing = true
-        let includeIPv6 = shouldLookupIPv6(pathSupportsIPv6: watcher.supportsIPv6, interface: watcher.interface)
         Task { @MainActor in
+            self.routeInterface = await RouteProbe.defaultRouteInterface()
+            let includeIPv6 = shouldLookupIPv6(pathSupportsIPv6: watcher.supportsIPv6, interface: activeInterface)
             let result = await probe.check(physicalInterface: watcher.physicalInterface)
             let verdict = result.verdict
             self.latencyMs = result.latencyMs
+            self.latencyHistory = (self.latencyHistory + [result.latencyMs]).suffix(Config.latencyHistoryLimit)
             self.portalSignIn = verdict == .captivePortal ? ExitIPCore.portalSignIn(redirect: result.portalRedirect) : nil
-            self.viaTunnel = await RouteProbe.defaultRouteInterface()?.kind == .tunnel
-            let snapshot = (verdict == .reachable) ? await self.resolver.resolve(includeIPv6: includeIPv6) : nil
-            NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms portal=\(result.portalRedirect?.absoluteString ?? "-") tunnel=\(self.viaTunnel) exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-")" } ?? "none")")
+            let includeDNS = self.pollsSinceDNSCheck >= Config.dnsCheckEveryPolls
+            var snapshot = (verdict == .reachable) ? await self.resolver.resolve(includeIPv6: includeIPv6, includeDNS: includeDNS) : nil
+            if let fresh = snapshot {
+                self.pollsSinceDNSCheck = fresh.dnsResolver == nil ? self.pollsSinceDNSCheck + 1 : 0
+                // A new exit may well mean a new resolver: check again on the next poll.
+                if fresh.dnsResolver == nil, fresh.primary.ip != self.model.lastGoodIP?.ip {
+                    self.pollsSinceDNSCheck = Config.dnsCheckEveryPolls
+                }
+                snapshot = carryForwardResolver(fresh, from: self.model.lastGood)
+            }
+            NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms directOnly=\(result.reachedOnlyDirectly) portal=\(result.portalRedirect?.absoluteString ?? "-") route=\(self.routeInterface?.name ?? "-") exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-") dns=\($0.dnsResolver?.ip ?? "-")" } ?? "none")")
             self.isRefreshing = false
             guard !self.paused else { return } // paused mid-flight: drop the result
-            self.apply(outcome: combinedOutcome(probe: verdict, fetched: snapshot))
+            self.apply(outcome: combinedOutcome(
+                probe: verdict, fetched: snapshot,
+                reachedOnlyDirectly: result.reachedOnlyDirectly, onTunnel: self.viaTunnel
+            ))
         }
     }
 
@@ -94,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if case .success(let snapshot) = outcome {
             lastCheckedDate = Date()
             settings.history = recordingExit(snapshot.primary, in: settings.history, at: Date())
-            settings.homeExit = homeExit(after: snapshot, via: watcher.interface, previous: settings.homeExit)
+            settings.homeExit = homeExit(after: snapshot, via: activeInterface, previous: settings.homeExit)
         }
         let (newModel, notes) = reduce(model, applying: outcome, context: warningContext)
         model = newModel
@@ -104,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var warningContext: WarningContext {
         WarningContext(
             expectedCountryCode: settings.expectedCountryCode,
-            onTunnel: watcher.interface?.kind == .tunnel,
+            onTunnel: viaTunnel,
             homeExit: settings.homeExit
         )
     }
@@ -127,8 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.update(MenuState(
             model: model,
             paused: paused,
-            interface: watcher.interface,
+            interface: activeInterface,
             latencyMs: latencyMs,
+            latencyHistory: latencyHistory,
             lastCheckedDate: lastCheckedDate,
             portalSignIn: model.phase == .failed(.captivePortal) ? portalSignIn : nil,
             viaTunnel: viaTunnel,
@@ -154,6 +180,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let (newModel, notes) = reassess(model, context: warningContext)
         model = newModel
         finish(posting: notes)
+    }
+
+    private func openSignIn() {
+        NSWorkspace.shared.open(portalSignIn?.url ?? Config.captivePortalSignInURL)
     }
 
     private func clearHistory() {

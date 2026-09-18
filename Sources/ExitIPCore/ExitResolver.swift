@@ -40,9 +40,11 @@ public actor GeoCache {
 /// Resolves the current exit snapshot: IPv4 and IPv6 addresses concurrently
 /// (each through its own fallback chain), then geo for each address — from the
 /// cache when the address has been seen before, otherwise through the geo chain.
+/// The DNS resolver check runs alongside; its failure never fails the snapshot.
 public struct ExitResolver: Sendable {
     public typealias AddressFetch = @Sendable (IPProvider) async -> String?
     public typealias GeoFetch = @Sendable (GeoProvider, String) async -> IPInfo?
+    public typealias ResolverFetch = @Sendable () async -> IPInfo?
 
     private let ipv4: ProviderChain<IPProvider>
     private let ipv6: ProviderChain<IPProvider>
@@ -50,6 +52,7 @@ public struct ExitResolver: Sendable {
     private let cache: GeoCache
     private let fetchAddress: AddressFetch
     private let fetchGeo: GeoFetch
+    private let fetchResolver: ResolverFetch
 
     public init(
         ipv4Providers: [IPProvider] = Config.ipv4Providers,
@@ -57,7 +60,8 @@ public struct ExitResolver: Sendable {
         geoProviders: [GeoProvider] = Config.geoProviders,
         cache: GeoCache = GeoCache(),
         fetchAddress: @escaping AddressFetch,
-        fetchGeo: @escaping GeoFetch
+        fetchGeo: @escaping GeoFetch,
+        fetchResolver: @escaping ResolverFetch = { nil }
     ) {
         self.ipv4 = ProviderChain(providers: ipv4Providers)
         self.ipv6 = ProviderChain(providers: ipv6Providers)
@@ -65,19 +69,27 @@ public struct ExitResolver: Sendable {
         self.cache = cache
         self.fetchAddress = fetchAddress
         self.fetchGeo = fetchGeo
+        self.fetchResolver = fetchResolver
     }
 
     /// Returns nil only when no address at all could be determined.
-    /// `includeIPv6: false` skips the IPv6 chain (see `shouldLookupIPv6`).
-    public func resolve(includeIPv6: Bool = true) async -> ExitSnapshot? {
+    /// `includeIPv6: false` skips the IPv6 chain (see `shouldLookupIPv6`);
+    /// `includeDNS: false` skips the resolver check (see `carryForwardResolver`).
+    public func resolve(includeIPv6: Bool = true, includeDNS: Bool = true) async -> ExitSnapshot? {
         async let v4Task = ipv4.resolve(using: fetchAddress)
         async let v6Task = ipv6Address(enabled: includeIPv6)
-        let (v4, v6) = await (v4Task, v6Task)
+        async let resolverTask = resolverInfo(enabled: includeDNS)
+        let (v4, v6, resolver) = await (v4Task, v6Task, resolverTask)
 
         guard let primaryAddress = v4 ?? v6 else { return nil }
         async let primary = geoInfo(for: primaryAddress)
         async let secondary = secondaryGeoInfo(v4: v4, v6: v6)
-        return await ExitSnapshot(primary: primary, ipv6: secondary)
+        return await ExitSnapshot(primary: primary, ipv6: secondary, dnsResolver: resolver)
+    }
+
+    private func resolverInfo(enabled: Bool) async -> IPInfo? {
+        guard enabled else { return nil }
+        return await fetchResolver()
     }
 
     private func ipv6Address(enabled: Bool) async -> String? {
@@ -105,6 +117,17 @@ public struct ExitResolver: Sendable {
     }
 }
 
+/// A reading without a resolver check keeps the previous reading's resolver,
+/// so the DNS-leak warning doesn't clear and re-fire between checks. Whether
+/// the carried reading is still current is the caller's problem (it should
+/// force a check when the exit changes).
+public func carryForwardResolver(_ snapshot: ExitSnapshot, from previous: ExitSnapshot?) -> ExitSnapshot {
+    guard snapshot.dnsResolver == nil, let previous else { return snapshot }
+    var updated = snapshot
+    updated.dnsResolver = previous.dnsResolver
+    return updated
+}
+
 extension ExitResolver {
     /// The production resolver, backed by URLSession.
     public static func live(timeout: TimeInterval = Config.requestTimeout) -> ExitResolver {
@@ -124,6 +147,12 @@ extension ExitResolver {
                 guard let url = provider.url(for: ip),
                       let data = await get(URLRequest(url: url), session: session) else { return nil }
                 return try? parse(data, as: provider.format)
+            },
+            fetchResolver: {
+                // A fresh random label each time, so the lookup can't be served from a cache.
+                guard let url = Config.dnsProbeURL(token: Config.randomDNSToken()),
+                      let data = await get(URLRequest(url: url), session: session) else { return nil }
+                return try? parseResolver(data)
             }
         )
     }

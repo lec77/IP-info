@@ -84,4 +84,24 @@ final class IPInfoParsingTests: XCTestCase {
         let decoded = try JSONDecoder().decode(IPInfo.self, from: JSONEncoder().encode(info))
         XCTAssertEqual(decoded, info)
     }
+
+    // MARK: DNS resolver probe
+
+    func testParseResolver() throws {
+        let data = Data(#"{"dns": {"geo": "United States - Google LLC", "ip": "172.253.9.222"}}"#.utf8)
+        XCTAssertEqual(try parseResolver(data), IPInfo(ip: "172.253.9.222", countryCode: "US", countryName: "United States", isp: "Google LLC"))
+    }
+
+    func testParseResolverPartialGeo() throws {
+        XCTAssertEqual(try parseResolver(Data(#"{"dns": {"geo": "China", "ip": "223.5.5.5"}}"#.utf8)),
+                       IPInfo(ip: "223.5.5.5", countryCode: "CN", countryName: "China"))
+        XCTAssertEqual(try parseResolver(Data(#"{"dns": {"ip": "223.5.5.5"}}"#.utf8)), IPInfo(ip: "223.5.5.5"))
+        XCTAssertEqual(try parseResolver(Data(#"{"dns": {"geo": "Narnia - Some Org", "ip": "9.9.9.9"}}"#.utf8)),
+                       IPInfo(ip: "9.9.9.9", countryName: "Narnia", isp: "Some Org"), "unknown country keeps the name, no code")
+    }
+
+    func testParseResolverRejectsBadAddress() {
+        XCTAssertThrowsError(try parseResolver(Data(#"{"dns": {"geo": "x", "ip": "not-an-ip"}}"#.utf8)))
+        XCTAssertThrowsError(try parseResolver(Data(#"{"error": true}"#.utf8)))
+    }
 }

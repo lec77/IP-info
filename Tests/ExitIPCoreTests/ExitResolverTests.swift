@@ -162,4 +162,54 @@ final class ExitResolverTests: XCTestCase {
         let three = await cache.lookup("3")
         XCTAssertNotNil(three)
     }
+
+    // MARK: DNS resolver
+
+    func testResolverReadingRidesAlongWithTheSnapshot() async {
+        let dns = IPInfo(ip: "172.253.9.222", countryCode: "US", isp: "Google LLC")
+        let r = ExitResolver(
+            ipv4Providers: v4, ipv6Providers: v6, geoProviders: geo,
+            fetchAddress: { p in p.name == "v4a" ? "1.1.1.1" : nil },
+            fetchGeo: { _, ip in IPInfo(ip: ip, countryCode: "US") },
+            fetchResolver: { dns }
+        )
+        let snap = await r.resolve()
+        XCTAssertEqual(snap, ExitSnapshot(primary: IPInfo(ip: "1.1.1.1", countryCode: "US"), dnsResolver: dns))
+    }
+
+    func testResolverFailureDoesNotFailTheSnapshot() async {
+        let r = ExitResolver(
+            ipv4Providers: v4, ipv6Providers: v6, geoProviders: geo,
+            fetchAddress: { p in p.name == "v4a" ? "1.1.1.1" : nil },
+            fetchGeo: { _, ip in IPInfo(ip: ip, countryCode: "US") },
+            fetchResolver: { nil }
+        )
+        let snap = await r.resolve()
+        XCTAssertEqual(snap?.primary.ip, "1.1.1.1")
+        XCTAssertNil(snap?.dnsResolver)
+    }
+
+    func testResolverCheckCanBeSkipped() async {
+        let calls = Calls()
+        let r = ExitResolver(
+            ipv4Providers: v4, ipv6Providers: v6, geoProviders: geo,
+            fetchAddress: { p in p.name == "v4a" ? "1.1.1.1" : nil },
+            fetchGeo: { _, ip in IPInfo(ip: ip, countryCode: "US") },
+            fetchResolver: { calls.geo("dns"); return IPInfo(ip: "9.9.9.9") }
+        )
+        let snap = await r.resolve(includeDNS: false)
+        XCTAssertNil(snap?.dnsResolver)
+        XCTAssertFalse(calls.geo.contains("dns"))
+    }
+
+    func testCarryForwardResolver() {
+        let dns = IPInfo(ip: "172.253.9.222", countryCode: "US")
+        let fresh = IPInfo(ip: "9.9.9.9", countryCode: "CH")
+        let previous = ExitSnapshot(primary: IPInfo(ip: "1.1.1.1"), dnsResolver: dns)
+        let without = ExitSnapshot(primary: IPInfo(ip: "1.1.1.1"))
+        XCTAssertEqual(carryForwardResolver(without, from: previous).dnsResolver, dns)
+        XCTAssertEqual(carryForwardResolver(without, from: nil).dnsResolver, nil)
+        XCTAssertEqual(carryForwardResolver(ExitSnapshot(primary: IPInfo(ip: "2.2.2.2")), from: previous).dnsResolver, dns, "carried even across an exit change; the caller forces a fresh check")
+        XCTAssertEqual(carryForwardResolver(ExitSnapshot(primary: IPInfo(ip: "1.1.1.1"), dnsResolver: fresh), from: previous).dnsResolver, fresh, "a fresh reading wins")
+    }
 }

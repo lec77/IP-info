@@ -71,7 +71,7 @@ final class NotificationDeciderTests: XCTestCase {
         let prev = ExitIPModel(phase: .ok, lastGood: snap(a))
         let (model, notes) = reduce(prev, applying: .failure(.captivePortal))
         XCTAssertEqual(model, ExitIPModel(phase: .failed(.captivePortal), lastGood: snap(a)))
-        XCTAssertEqual(notes, [AppNotification(title: "Exit IP unavailable", body: "Captive portal detected — open a browser to sign in.")])
+        XCTAssertEqual(notes, [AppNotification(title: "Exit IP unavailable", body: "Captive portal detected — open a browser to sign in.", action: .openSignIn)])
     }
 
     func testActionableFailureStillNotifiesWhileFailed() {
@@ -141,5 +141,28 @@ final class NotificationDeciderTests: XCTestCase {
         XCTAssertEqual(model, down)
         XCTAssertEqual(notes, [])
         XCTAssertEqual(reassess(ExitIPModel(), context: WarningContext(expectedCountryCode: "DE")).notifications, [])
+    }
+
+    // MARK: tunnel down
+
+    func testTunnelDownFromOkNotifiesWithoutAction() {
+        let prev = ExitIPModel(phase: .ok, lastGood: snap(a))
+        let (model, notes) = reduce(prev, applying: .failure(.tunnelDown))
+        XCTAssertEqual(model.phase, .failed(.tunnelDown))
+        XCTAssertEqual(notes, [AppNotification(title: "Exit IP unavailable", body: "The VPN/proxy tunnel isn't passing traffic; the network underneath is fine.")])
+    }
+
+    func testTunnelDownAfterOfflineIsAnnounced() {
+        // Actionable: the user can restart the proxy, so say so even mid-failure.
+        let prev = ExitIPModel(phase: .failed(.offline), lastGood: snap(a))
+        XCTAssertEqual(reduce(prev, applying: .failure(.tunnelDown)).notifications.count, 1)
+        XCTAssertEqual(reduce(ExitIPModel(phase: .failed(.tunnelDown), lastGood: snap(a)), applying: .failure(.tunnelDown)).notifications, [])
+    }
+
+    func testOnlyPortalNotificationOffersSignIn() {
+        let prev = ExitIPModel(phase: .ok, lastGood: snap(a))
+        XCTAssertEqual(reduce(prev, applying: .failure(.captivePortal)).notifications.first?.action, .openSignIn)
+        XCTAssertNil(reduce(prev, applying: .failure(.offline)).notifications.first?.action)
+        XCTAssertNil(reduce(prev, applying: .failure(.lookupFailed)).notifications.first?.action)
     }
 }

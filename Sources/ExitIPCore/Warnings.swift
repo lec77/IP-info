@@ -11,6 +11,9 @@ public enum ExitWarning: Sendable, Hashable {
     /// A tunnel interface carries the default route, yet the exit is the ISP
     /// seen when no tunnel was up — traffic is not actually going through it.
     case tunnelExitIsHome
+    /// DNS queries are answered by a resolver in a different country than the
+    /// exit — name lookups are bypassing the tunnel.
+    case dnsLeak
 
     public enum Severity: Int, Sendable, Comparable {
         case caution, critical
@@ -28,7 +31,7 @@ public enum ExitWarning: Sendable, Hashable {
     public var severity: Severity {
         switch self {
         case .unexpectedCountry: return .critical
-        case .ipv6Mismatch, .tunnelExitIsHome: return .caution
+        case .ipv6Mismatch, .tunnelExitIsHome, .dnsLeak: return .caution
         }
     }
 }
@@ -65,6 +68,14 @@ public func assessWarnings(_ snapshot: ExitSnapshot, context: WarningContext) ->
 
     if context.onTunnel, let home = context.homeExit, isSameExit(primary, home) {
         warnings.append(.tunnelExitIsHome)
+    }
+
+    // Unknown country on either side is not a mismatch.
+    if let resolver = snapshot.dnsResolver,
+       let a = normalizedCountryCode(resolver.countryCode),
+       let b = normalizedCountryCode(primary.countryCode),
+       a != b {
+        warnings.append(.dnsLeak)
     }
     return warnings
 }
@@ -145,6 +156,12 @@ private func notification(for warning: ExitWarning, snapshot: ExitSnapshot, expe
             title: "Possible VPN leak",
             body: "A tunnel is up, but the exit is your usual ISP\(ispSuffix(snapshot.primary.isp))."
         )
+    case .dnsLeak:
+        let via = snapshot.dnsResolver.map { "via \(exitPlace($0)) (\($0.ip))" } ?? "elsewhere"
+        return AppNotification(
+            title: "Possible DNS leak",
+            body: "DNS queries are answered \(via), not in your exit's country."
+        )
     }
 }
 
@@ -159,6 +176,9 @@ public func warningLine(_ warning: ExitWarning, snapshot: ExitSnapshot, expected
         text = "IPv6 exits \(via) — possible leak"
     case .tunnelExitIsHome:
         text = "Tunnel up, but exit is your usual ISP\(ispSuffix(snapshot.primary.isp))"
+    case .dnsLeak:
+        let via = snapshot.dnsResolver.map { "via \(exitPlace($0))" } ?? "elsewhere"
+        text = "DNS resolves \(via) — possible leak"
     }
     return "\(warning.severity.glyph) \(text)"
 }
@@ -168,7 +188,7 @@ private func ispSuffix(_ isp: String?) -> String {
 }
 
 /// "🇺🇸 Comcast", "🇺🇸", "Comcast", or the address.
-private func exitPlace(_ info: IPInfo) -> String {
+func exitPlace(_ info: IPInfo) -> String {
     let parts = [flag(for: info), info.isp].compactMap { $0 }.filter { !$0.isEmpty }
     return parts.isEmpty ? info.ip : parts.joined(separator: " ")
 }

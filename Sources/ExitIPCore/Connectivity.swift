@@ -16,11 +16,22 @@ public func probeVerdict(statusCode: Int?, expected: Int = Config.probeExpectedS
 /// Combines the connectivity-probe verdict with the exit-lookup result into a
 /// single `FetchOutcome`. The probe is authoritative for online/offline/portal;
 /// the lookup only refines a reachable connection into success vs. lookup-failed.
-public func combinedOutcome(probe: ProbeVerdict, fetched: ExitSnapshot?) -> FetchOutcome {
+///
+/// `reachedOnlyDirectly` means the probe over the default route got nothing and
+/// only the fallback bound to the physical interface got through. With a tunnel
+/// on the default route, a failed lookup then means the tunnel is what's broken.
+public func combinedOutcome(
+    probe: ProbeVerdict,
+    fetched: ExitSnapshot?,
+    reachedOnlyDirectly: Bool = false,
+    onTunnel: Bool = false
+) -> FetchOutcome {
     switch probe {
     case .unreachable: return .failure(.offline)
     case .captivePortal: return .failure(.captivePortal)
-    case .reachable: return fetched.map(FetchOutcome.success) ?? .failure(.lookupFailed)
+    case .reachable:
+        if let fetched { return .success(fetched) }
+        return reachedOnlyDirectly && onTunnel ? .failure(.tunnelDown) : .failure(.lookupFailed)
     }
 }
 

@@ -31,9 +31,13 @@ public struct ExitSnapshot: Equatable, Sendable {
     /// The IPv6 exit, when the host has IPv6 connectivity *in addition* to IPv4.
     /// `nil` when there is no IPv6 path, or when IPv6 is already the primary.
     public var ipv6: IPInfo?
+    /// The resolver that answers this machine's DNS queries, as seen by an
+    /// authoritative server, when that lookup succeeded.
+    public var dnsResolver: IPInfo?
 
-    public init(primary: IPInfo, ipv6: IPInfo? = nil) {
+    public init(primary: IPInfo, ipv6: IPInfo? = nil, dnsResolver: IPInfo? = nil) {
         self.primary = primary
         self.ipv6 = ipv6
+        self.dnsResolver = dnsResolver
     }
 }

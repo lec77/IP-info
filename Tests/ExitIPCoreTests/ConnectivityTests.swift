@@ -23,6 +23,17 @@ final class ConnectivityTests: XCTestCase {
         XCTAssertEqual(combinedOutcome(probe: .reachable, fetched: nil), .failure(.lookupFailed))
     }
 
+    func testTunnelDownNeedsDirectOnlyReachAndATunnel() {
+        XCTAssertEqual(combinedOutcome(probe: .reachable, fetched: nil, reachedOnlyDirectly: true, onTunnel: true), .failure(.tunnelDown))
+        // Off a tunnel, "only direct got through" just means the HTTPS probe failed.
+        XCTAssertEqual(combinedOutcome(probe: .reachable, fetched: nil, reachedOnlyDirectly: true, onTunnel: false), .failure(.lookupFailed))
+        // On a tunnel with the tunnel probe fine, a failed lookup is the lookup's fault.
+        XCTAssertEqual(combinedOutcome(probe: .reachable, fetched: nil, reachedOnlyDirectly: false, onTunnel: true), .failure(.lookupFailed))
+        // A successful lookup through the tunnel means the tunnel works, whatever the probe did.
+        XCTAssertEqual(combinedOutcome(probe: .reachable, fetched: snap, reachedOnlyDirectly: true, onTunnel: true), .success(snap))
+        XCTAssertEqual(combinedOutcome(probe: .unreachable, fetched: nil, reachedOnlyDirectly: true, onTunnel: true), .failure(.offline))
+    }
+
     // Probe classification: only the exact expected status counts as reachable.
     func testProbeVerdict() {
         XCTAssertEqual(probeVerdict(statusCode: 204), .reachable)
@@ -38,6 +49,7 @@ final class ConnectivityTests: XCTestCase {
 
     func testOnlyCaptivePortalIsActionable() {
         XCTAssertTrue(FailureReason.captivePortal.isActionable)
+        XCTAssertTrue(FailureReason.tunnelDown.isActionable)
         XCTAssertFalse(FailureReason.offline.isActionable)
         XCTAssertFalse(FailureReason.lookupFailed.isActionable)
     }
@@ -52,6 +64,20 @@ final class ConnectivityTests: XCTestCase {
         XCTAssertEqual(Config.probeTimeout, 5)
         XCTAssertEqual(Config.offlineConfirmations, 2)
         XCTAssertEqual(Config.offlineRecheckDelay, 2)
+    }
+
+    func testDNSProbeURL() {
+        XCTAssertEqual(Config.dnsProbeURL(token: "abc123")?.absoluteString, "https://abc123.edns.ip-api.com/json")
+        XCTAssertEqual(Config.dnsProbeURL(token: "ABC")?.absoluteString, "https://abc.edns.ip-api.com/json")
+        XCTAssertNil(Config.dnsProbeURL(token: ""))
+        XCTAssertNil(Config.dnsProbeURL(token: "a.b"), "a dot would change the zone")
+        XCTAssertNil(Config.dnsProbeURL(token: "a/b"))
+        let token = Config.randomDNSToken()
+        XCTAssertEqual(token.count, 32, "the endpoint only answers UUID-shaped labels")
+        XCTAssertTrue(token.allSatisfy { "0123456789abcdef".contains($0) })
+        XCTAssertEqual(Config.dnsCheckEveryPolls, 5)
+        XCTAssertNotNil(Config.dnsProbeURL(token: token))
+        XCTAssertNotEqual(Config.randomDNSToken(), token)
     }
 
     // Offline hysteresis: require `confirmAfter` consecutive failures before reporting.
@@ -86,7 +112,7 @@ final class ConnectivityTests: XCTestCase {
     }
 
     func testEveryFailureCountsTowardsTheStreak() {
-        for reason in [FailureReason.offline, .captivePortal, .lookupFailed] {
+        for reason in [FailureReason.offline, .captivePortal, .tunnelDown, .lookupFailed] {
             let r = confirmOutcome(.failure(reason), failureStreak: 0, confirmAfter: 2)
             XCTAssertFalse(r.report)
             XCTAssertEqual(r.failureStreak, 1)

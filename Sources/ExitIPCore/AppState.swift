@@ -1,13 +1,17 @@
 public enum FailureReason: Sendable, Equatable {
     case offline
     case captivePortal
+    /// The network underneath works (a probe bound to the physical interface
+    /// got through) but nothing gets through the VPN/proxy tunnel on the
+    /// default route.
+    case tunnelDown
     case lookupFailed
 
     /// Whether the user can do something about it — worth announcing even when
     /// already in a failed state.
     public var isActionable: Bool {
         switch self {
-        case .captivePortal: return true
+        case .captivePortal, .tunnelDown: return true
         case .offline, .lookupFailed: return false
         }
     }
@@ -45,11 +49,18 @@ public struct ExitIPModel: Sendable, Equatable {
 }
 
 public struct AppNotification: Sendable, Equatable {
+    /// A button offered on the notification.
+    public enum Action: Sendable, Equatable {
+        case openSignIn
+    }
+
     public var title: String
     public var body: String
+    public var action: Action?
 
-    public init(title: String, body: String) {
+    public init(title: String, body: String, action: Action? = nil) {
         self.title = title
         self.body = body
+        self.action = action
     }
 }

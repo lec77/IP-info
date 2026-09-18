@@ -39,6 +39,10 @@ final class DisplayFormattingTests: XCTestCase {
         XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .failed(.captivePortal), lastGood: ExitSnapshot(primary: full))), "⚠︎ captive portal")
     }
 
+    func testTitleTunnelDown() {
+        XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .failed(.tunnelDown), lastGood: ExitSnapshot(primary: full))), "⚠︎ tunnel down")
+    }
+
     func testTitleLookupFailedWithLastKnown() {
         XCTAssertEqual(menuBarTitle(for: ExitIPModel(phase: .failed(.lookupFailed), lastGood: ExitSnapshot(primary: full))), "⚠︎ 🇺🇸 San Jose")
     }
@@ -117,6 +121,26 @@ final class DisplayFormattingTests: XCTestCase {
     func testLatencyLine() {
         XCTAssertEqual(latencyLine(ms: 85), "Latency: 85 ms")
         XCTAssertEqual(latencyLine(ms: nil), "Latency: —")
+        XCTAssertEqual(latencyLine(ms: 85, trend: [85]), "Latency: 85 ms", "one sample is no trend")
+        XCTAssertEqual(latencyLine(ms: 85, trend: [40, 85]), "Latency: 85 ms ▄█")
+        XCTAssertEqual(latencyLine(ms: nil, trend: [40, nil]), "Latency: — █·")
+    }
+
+    func testLatencyTrend() {
+        XCTAssertNil(latencyTrend([]))
+        XCTAssertNil(latencyTrend([50]))
+        XCTAssertEqual(latencyTrend([100, 100]), "██", "scaled to the peak")
+        XCTAssertEqual(latencyTrend([0, 50, 100]), "▁▅█")
+        XCTAssertEqual(latencyTrend([10, 20, 30, 40, 50, 60, 70, 80]), "▂▃▄▅▅▆▇█", "levels are rounded, not floored")
+        XCTAssertEqual(latencyTrend([nil, nil]), "··", "no latency at all still draws")
+        XCTAssertEqual(latencyTrend([80, nil, 20]), "█·▃")
+        XCTAssertEqual(latencyTrend([-5, 10]), "▁█", "negative clamps to the floor")
+    }
+
+    func testDNSLine() {
+        XCTAssertEqual(dnsLine(for: IPInfo(ip: "172.253.9.222", countryCode: "US", isp: "Google LLC")), "DNS: 🇺🇸 Google LLC")
+        XCTAssertEqual(dnsLine(for: IPInfo(ip: "172.253.9.222", countryCode: "US")), "DNS: 🇺🇸")
+        XCTAssertEqual(dnsLine(for: IPInfo(ip: "172.253.9.222")), "DNS: 172.253.9.222")
     }
 
     func testCountryLabel() {

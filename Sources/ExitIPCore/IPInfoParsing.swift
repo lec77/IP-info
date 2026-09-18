@@ -36,6 +36,15 @@ private struct IpifyResponse: Decodable {
     let ip: String
 }
 
+/// ip-api.com's EDNS test: `{"dns": {"ip": "…", "geo": "United States - Google LLC"}}`.
+private struct EDNSResponse: Decodable {
+    struct DNS: Decodable {
+        let ip: String
+        let geo: String?
+    }
+    let dns: DNS
+}
+
 enum IPParsingError: Error {
     case invalidIPAddress(String)
     case providerError
@@ -99,6 +108,23 @@ func parse(_ data: Data, as format: GeoFormat) throws -> IPInfo {
         throw IPParsingError.invalidIPAddress(info.ip)
     }
     return info
+}
+
+/// Parses the DNS-resolver probe's payload into an `IPInfo` for the resolver.
+/// Throws if the resolver address is missing or invalid.
+func parseResolver(_ data: Data) throws -> IPInfo {
+    let r = try JSONDecoder().decode(EDNSResponse.self, from: data)
+    guard isValidIPAddress(r.dns.ip) else { throw IPParsingError.invalidIPAddress(r.dns.ip) }
+    // "geo" is "<country> - <org>"; either part may be missing.
+    let parts = (r.dns.geo ?? "").components(separatedBy: " - ").map { $0.trimmingCharacters(in: .whitespaces) }
+    let country = parts.first.flatMap { $0.isEmpty ? nil : $0 }
+    let org = parts.dropFirst().joined(separator: " - ")
+    return IPInfo(
+        ip: r.dns.ip,
+        countryCode: country.flatMap(countryCode(forCountryName:)),
+        countryName: country,
+        isp: org.isEmpty ? nil : org
+    )
 }
 
 /// Removes a leading "AS<digits> " token from an org string (e.g. ipinfo.io's `org`).

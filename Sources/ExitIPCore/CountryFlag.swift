@@ -35,3 +35,31 @@ public func countryName(forCountryCode code: String) -> String? {
     }
     return Locale(identifier: "en_US").localizedString(forRegionCode: code)
 }
+
+/// ISO code for an English country name ("United States" → "US"), or nil for
+/// a name that isn't recognised. Matching is case-insensitive and covers the
+/// common short forms geo services use where the locale's name differs.
+public func countryCode(forCountryName name: String) -> String? {
+    let needle = name.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !needle.isEmpty else { return nil }
+    return countryNameAliases[needle] ?? countryNameIndex[needle]
+}
+
+private let countryNameIndex: [String: String] = {
+    let locale = Locale(identifier: "en_US")
+    var index: [String: String] = [:]
+    for region in Locale.Region.isoRegions {
+        let code = region.identifier
+        guard code.count == 2, let name = locale.localizedString(forRegionCode: code) else { continue }
+        index[name.lowercased()] = code
+    }
+    return index
+}()
+
+// Apple's region names differ from what geo services send for a few places
+// ("China mainland", "Türkiye", "Myanmar (Burma)").
+private let countryNameAliases: [String: String] = [
+    "china": "CN", "myanmar": "MM", "burma": "MM", "hong kong": "HK", "macau": "MO", "macao": "MO", "turkey": "TR", "czech republic": "CZ",
+    "the netherlands": "NL", "russian federation": "RU", "south korea": "KR", "korea": "KR",
+    "viet nam": "VN", "united states of america": "US", "usa": "US", "uk": "GB", "great britain": "GB",
+]

@@ -162,4 +162,32 @@ final class WarningsTests: XCTestCase {
         XCTAssertEqual(warningLine(.tunnelExitIsHome, snapshot: ExitSnapshot(primary: IPInfo(ip: "1.1.1.1")), expectedCountryCode: nil),
                        "⚠︎ Tunnel up, but exit is your usual ISP")
     }
+
+    // MARK: DNS leak
+
+    private let googleDNS = IPInfo(ip: "172.253.9.222", countryCode: "US", isp: "Google LLC")
+    private let cnDNS = IPInfo(ip: "223.5.5.5", countryCode: "CN", isp: "Alibaba")
+
+    func testDNSSameCountryIsQuiet() {
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us, dnsResolver: googleDNS), context: WarningContext()), [])
+    }
+
+    func testDNSOtherCountryWarnsRegardlessOfTunnel() {
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us, dnsResolver: cnDNS), context: WarningContext()), [.dnsLeak])
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us, dnsResolver: cnDNS), context: WarningContext(onTunnel: true)), [.dnsLeak])
+    }
+
+    func testDNSUnknownCountryIsNotALeak() {
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us, dnsResolver: IPInfo(ip: "9.9.9.9")), context: WarningContext()), [])
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: IPInfo(ip: "1.1.1.1"), dnsResolver: cnDNS), context: WarningContext()), [])
+        XCTAssertEqual(assessWarnings(ExitSnapshot(primary: us), context: WarningContext()), [], "no resolver reading")
+    }
+
+    func testDNSLeakSeverityTextAndNotification() {
+        let snap = ExitSnapshot(primary: us, dnsResolver: cnDNS)
+        XCTAssertEqual(ExitWarning.dnsLeak.severity, .caution)
+        XCTAssertEqual(warningLine(.dnsLeak, snapshot: snap, expectedCountryCode: nil), "⚠︎ DNS resolves via 🇨🇳 Alibaba — possible leak")
+        let notes = warningNotifications(previous: [], current: [.dnsLeak], snapshot: snap, expectedCountryCode: nil)
+        XCTAssertEqual(notes, [AppNotification(title: "Possible DNS leak", body: "DNS queries are answered via 🇨🇳 Alibaba (223.5.5.5), not in your exit's country.")])
+    }
 }

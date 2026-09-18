@@ -8,6 +8,9 @@ struct ProbeResult {
     var latencyMs: Int?
     /// Where a captive portal redirected the plain-HTTP probe, if it did.
     var portalRedirect: URL?
+    /// The probe over the default route got nothing; only the fallback bound
+    /// to the physical interface got through.
+    var reachedOnlyDirectly = false
 }
 
 /// Probes a lightweight endpoint (expected HTTP 204) to confirm real internet
@@ -48,9 +51,11 @@ final class ConnectivityProbe: NSObject, URLSessionTaskDelegate {
             return ProbeResult(verdict: verdict, latencyMs: verdict == .reachable ? latency : nil)
         }
         let head = await BoundHTTPProbe.fetchHead(url: captiveURL, interface: physicalInterface, timeout: timeout)
+        let verdict = probeVerdict(statusCode: head?.statusCode)
         return ProbeResult(
-            verdict: probeVerdict(statusCode: head?.statusCode),
-            portalRedirect: head.flatMap { portalRedirectURL(from: $0, requestURL: captiveURL) }
+            verdict: verdict,
+            portalRedirect: head.flatMap { portalRedirectURL(from: $0, requestURL: captiveURL) },
+            reachedOnlyDirectly: verdict == .reachable && physicalInterface != nil
         )
     }
 

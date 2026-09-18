@@ -28,4 +28,16 @@ final class CountryFlagTests: XCTestCase {
         XCTAssertNil(countryName(forCountryCode: "US1"))
         XCTAssertNil(countryName(forCountryCode: "U1"))
     }
+
+    func testCountryCodeForName() {
+        XCTAssertEqual(countryCode(forCountryName: "United States"), "US")
+        XCTAssertEqual(countryCode(forCountryName: "united states"), "US")
+        XCTAssertEqual(countryCode(forCountryName: " Germany "), "DE")
+        XCTAssertEqual(countryCode(forCountryName: "China"), "CN")
+        XCTAssertEqual(countryCode(forCountryName: "Hong Kong"), "HK", "geo services use the short form")
+        XCTAssertEqual(countryCode(forCountryName: "Turkey"), "TR")
+        XCTAssertEqual(countryCode(forCountryName: "South Korea"), "KR")
+        XCTAssertNil(countryCode(forCountryName: "Narnia"))
+        XCTAssertNil(countryCode(forCountryName: ""))
+    }
 }

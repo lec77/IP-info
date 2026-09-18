@@ -28,7 +28,8 @@ public func reduce(
         if case .failed(let previous) = model.phase, !(reason.isActionable && reason != previous) {
             return (newModel, []) // no repeat while failed
         }
-        return (newModel, [AppNotification(title: "Exit IP unavailable", body: failureBody(reason))])
+        let action: AppNotification.Action? = reason == .captivePortal ? .openSignIn : nil
+        return (newModel, [AppNotification(title: "Exit IP unavailable", body: failureBody(reason), action: action)])
     }
 }
 
@@ -53,6 +54,7 @@ private func failureBody(_ reason: FailureReason) -> String {
     switch reason {
     case .offline: return "No network connection."
     case .captivePortal: return "Captive portal detected — open a browser to sign in."
+    case .tunnelDown: return "The VPN/proxy tunnel isn't passing traffic; the network underneath is fine."
     case .lookupFailed: return "Could not reach IP lookup service."
     }
 }

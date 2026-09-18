@@ -44,6 +44,27 @@ public enum Config {
     public static let offlineConfirmations = 2
     public static let offlineRecheckDelay: TimeInterval = 2
 
+    /// DNS resolver check: a unique label under this zone forces a fresh lookup,
+    /// and the endpoint reports which resolver asked for it. `{token}` is the
+    /// label; the endpoint only answers for 32-hex (UUID-shaped) ones.
+    public static let dnsProbeTemplate = "https://{token}.edns.ip-api.com/json"
+
+    public static func dnsProbeURL(token: String) -> URL? {
+        guard !token.isEmpty, token.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else { return nil }
+        return URL(string: dnsProbeTemplate.replacingOccurrences(of: "{token}", with: token.lowercased()))
+    }
+
+    public static func randomDNSToken() -> String {
+        String((0..<32).map { _ in "0123456789abcdef".randomElement()! })
+    }
+
+    /// The resolver check takes several seconds (the endpoint waits for the
+    /// query to arrive), so it runs on every Nth poll rather than every one.
+    public static let dnsCheckEveryPolls = 5
+
+    /// Latency samples kept for the trend sparkline in the menu.
+    public static let latencyHistoryLimit = 12
+
     /// Exit-IP change history: entries kept on disk / shown in the menu.
     public static let historyLimit = 50
     public static let historyMenuLimit = 12

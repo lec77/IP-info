@@ -73,20 +73,41 @@ public enum PortalStatus: Sendable, Equatable {
 public func portalStatus(for model: ExitIPModel, signIn: PortalSignIn?) -> PortalStatus {
     switch model.phase {
     case .failed(.captivePortal): return .signInRequired(host: signIn?.url.host)
-    case .ok, .failed(.lookupFailed): return .notDetected
+    case .ok, .failed(.lookupFailed), .failed(.tunnelDown): return .notDetected
     case .initial, .failed(.offline): return .unknown
     }
 }
 
 /// Menu item title for opening the sign-in page. The item is always offered
-/// (detection can miss), so the title carries whether a login is actually
-/// being asked for, and names the portal's host when the probe caught it.
+/// (detection can miss); it names the portal's host when the probe caught it,
+/// and `signInBadge` says whether a login is actually being asked for.
 public func signInMenuTitle(_ status: PortalStatus) -> String {
+    if case .signInRequired(let host?) = status, !host.isEmpty {
+        return "Open sign-in page (\(host))…"
+    }
+    return "Open sign-in page…"
+}
+
+/// The coloured status pill shown beside the sign-in item.
+public struct SignInBadge: Sendable, Equatable {
+    public enum Tone: Sendable, Equatable {
+        case alert, ok, neutral
+    }
+
+    public var text: String
+    public var tone: Tone
+
+    public init(text: String, tone: Tone) {
+        self.text = text
+        self.tone = tone
+    }
+}
+
+public func signInBadge(_ status: PortalStatus) -> SignInBadge {
     switch status {
-    case .signInRequired(let host?) where !host.isEmpty: return "⚠︎ Sign-in required — open portal page (\(host))…"
-    case .signInRequired: return "⚠︎ Sign-in required — open portal page…"
-    case .notDetected: return "Open sign-in page (no portal detected)…"
-    case .unknown: return "Open sign-in page…"
+    case .signInRequired: return SignInBadge(text: "Sign-in required", tone: .alert)
+    case .notDetected: return SignInBadge(text: "No portal", tone: .ok)
+    case .unknown: return SignInBadge(text: "Unknown", tone: .neutral)
     }
 }
 

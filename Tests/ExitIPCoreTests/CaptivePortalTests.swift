@@ -108,16 +108,24 @@ final class CaptivePortalTests: XCTestCase {
         XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.captivePortal)), signIn: nil), .signInRequired(host: nil))
         XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .ok), signIn: nil), .notDetected)
         XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.lookupFailed)), signIn: nil), .notDetected, "probe got through; only the lookup failed")
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.tunnelDown)), signIn: nil), .notDetected, "the direct probe got through")
         XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.offline)), signIn: nil), .unknown)
         XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .initial), signIn: nil), .unknown)
     }
 
-    func testMenuTitleSaysWhetherSignInIsNeeded() {
-        XCTAssertEqual(signInMenuTitle(.signInRequired(host: "10.93.115.1")), "⚠︎ Sign-in required — open portal page (10.93.115.1)…")
-        XCTAssertEqual(signInMenuTitle(.signInRequired(host: nil)), "⚠︎ Sign-in required — open portal page…")
-        XCTAssertEqual(signInMenuTitle(.signInRequired(host: "")), "⚠︎ Sign-in required — open portal page…")
-        XCTAssertEqual(signInMenuTitle(.notDetected), "Open sign-in page (no portal detected)…")
+    func testMenuTitleNamesPortalHostOnly() {
+        XCTAssertEqual(signInMenuTitle(.signInRequired(host: "10.93.115.1")), "Open sign-in page (10.93.115.1)…")
+        XCTAssertEqual(signInMenuTitle(.signInRequired(host: nil)), "Open sign-in page…")
+        XCTAssertEqual(signInMenuTitle(.signInRequired(host: "")), "Open sign-in page…")
+        XCTAssertEqual(signInMenuTitle(.notDetected), "Open sign-in page…")
         XCTAssertEqual(signInMenuTitle(.unknown), "Open sign-in page…")
+    }
+
+    func testBadgeSaysWhetherSignInIsNeeded() {
+        XCTAssertEqual(signInBadge(.signInRequired(host: "10.93.115.1")), SignInBadge(text: "Sign-in required", tone: .alert))
+        XCTAssertEqual(signInBadge(.signInRequired(host: nil)), SignInBadge(text: "Sign-in required", tone: .alert))
+        XCTAssertEqual(signInBadge(.notDetected), SignInBadge(text: "No portal", tone: .ok))
+        XCTAssertEqual(signInBadge(.unknown), SignInBadge(text: "Unknown", tone: .neutral))
     }
 
     func testTunnelHintOnlyForNonLocalPagesOnATunnel() {

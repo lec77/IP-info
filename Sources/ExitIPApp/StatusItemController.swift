@@ -7,6 +7,7 @@ struct MenuState {
     var paused = false
     var interface: ActiveInterface?
     var latencyMs: Int?
+    var latencyHistory: [Int?] = []
     var lastCheckedDate: Date?
     /// Set only while a captive portal is detected.
     var portalSignIn: PortalSignIn?
@@ -67,12 +68,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
             if let loc = locationLine(for: snapshot.primary) { menu.addItem(disabledItem(loc)) }
             if let isp = ispLine(for: snapshot.primary) { menu.addItem(disabledItem(isp)) }
+            if let dns = snapshot.dnsResolver { menu.addItem(copyItem(dnsLine(for: dns), copies: dns.ip)) }
         } else {
             menu.addItem(disabledItem("No IP yet"))
         }
 
         menu.addItem(disabledItem(interfaceLine(state.interface)))
-        menu.addItem(disabledItem(latencyLine(ms: state.latencyMs)))
+        menu.addItem(disabledItem(latencyLine(ms: state.latencyMs, trend: state.latencyHistory)))
         if let last = state.history.last {
             let seconds = Int(now.timeIntervalSince(last.date))
             menu.addItem(disabledItem(stableForText(seconds: seconds)))
@@ -83,7 +85,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // Always offered: portal detection can miss (e.g. the portal only
         // intercepts some traffic), and macOS's own assistant only checks on join.
         let status = portalStatus(for: state.model, signIn: state.portalSignIn)
-        menu.addItem(actionItem(signInMenuTitle(status), #selector(openSignIn), key: ""))
+        let signInItem = actionItem(signInMenuTitle(status), #selector(openSignIn), key: "")
+        signInItem.view = BadgedMenuItemView(title: signInItem.title, badge: signInBadge(status))
+        menu.addItem(signInItem)
         if let signIn = state.portalSignIn, let hint = signInHint(signIn, viaTunnel: state.viaTunnel) {
             menu.addItem(disabledItem(hint))
         }

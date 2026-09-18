@@ -36,6 +36,8 @@ private func baseTitle(for model: ExitIPModel) -> String {
         return "⚠︎ offline"
     case .failed(.captivePortal):
         return "⚠︎ captive portal"
+    case .failed(.tunnelDown):
+        return "⚠︎ tunnel down"
     case .failed(.lookupFailed):
         if let info = model.lastGoodIP { return "⚠︎ \(placeLabel(for: info))" }
         return "⚠︎"
@@ -81,9 +83,32 @@ public func lastCheckedText(secondsAgo: Int) -> String {
     return s < 5 ? "Last checked: just now" : "Last checked: \(durationText(seconds: s)) ago"
 }
 
-public func latencyLine(ms: Int?) -> String {
-    guard let ms else { return "Latency: —" }
-    return "Latency: \(ms) ms"
+/// "Latency: 85 ms ▂▃▂▅▁" — the trend (see `latencyTrend`) is appended when
+/// there is one.
+public func latencyLine(ms: Int?, trend samples: [Int?] = []) -> String {
+    let base = ms.map { "Latency: \($0) ms" } ?? "Latency: —"
+    guard let trend = latencyTrend(samples) else { return base }
+    return "\(base) \(trend)"
+}
+
+private let trendBars: [Character] = Array("▁▂▃▄▅▆▇█")
+
+/// Sparkline of recent latency samples, oldest first, scaled to the highest
+/// one; a check with no latency (offline, portal, tunnel down) shows as "·".
+/// nil until there are two samples to compare.
+public func latencyTrend(_ samples: [Int?]) -> String? {
+    guard samples.count >= 2 else { return nil }
+    let peak = max(samples.compactMap { $0 }.max() ?? 0, 1)
+    return String(samples.map { sample -> Character in
+        guard let sample else { return "·" }
+        let level = Int((Double(max(sample, 0)) / Double(peak) * Double(trendBars.count - 1)).rounded())
+        return trendBars[level]
+    })
+}
+
+/// "DNS: 🇺🇸 Google LLC" — who answers DNS queries, or the bare address.
+public func dnsLine(for resolver: IPInfo) -> String {
+    "DNS: \(exitPlace(resolver))"
 }
 
 /// "🇺🇸 United States", falling back to the bare code, or "?" for none.

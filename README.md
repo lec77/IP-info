@@ -11,7 +11,7 @@ A tiny native macOS **menu bar app** that shows your current **exit (public) IP*
 - **VPN leak detection.** The dropdown shows which interface carries your traffic (`Via: VPN tunnel (utun4)` / `Wi-Fi (en0)`). The app remembers the exit it saw while *not* on a tunnel; if a tunnel is up but the exit is still that ISP, you're warned.
 - **IPv4 + IPv6.** Both exits are looked up (hosts without IPv6 just show IPv4). If IPv6 exits in a different country than IPv4 — or, on a tunnel, via a different ISP — that's the classic IPv6 leak and it's flagged.
 - **History.** *History ▸* lists recent exit changes (`14:05  🇺🇸 → 🇩🇪  5.6.7.8`, click to copy) and the dropdown shows "Unchanged for 3h 12m". Persisted, so a change that happened while the app wasn't running is still recorded at launch.
-- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (with an *Open sign-in page…* item), and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown.
+- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the *Open sign-in page…* item then opens the portal's own login URL, and warns when a VPN/proxy tunnel would swallow it; the item is always available in case detection misses), and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown.
 - **Notifications** on exit change, connectivity loss/restore, captive portal, and every warning above (toggle in the menu; the setting persists).
 - **Pause monitoring** (`⏸` in the title) when you don't want the traffic — e.g. on a metered connection.
 - **Launch at login** toggle (via `SMAppService`).
@@ -52,7 +52,7 @@ Quit                        ⌘Q
 ## Architecture
 
 - `Sources/ExitIPCore` — pure, fully unit-tested logic, Swift 6 language mode: data model, provider JSON parsing, the address/geo resolver with its per-address geo cache, connectivity verdicts (reachable / captive portal / offline) + hysteresis, the state + notification reducer, exit-warning assessment (expected country, IPv6 mismatch, tunnel-but-home-ISP), change history, interface classification, and display formatting.
-- `Sources/ExitIPApp` — a thin AppKit shell: status item + menu, network watcher (`NWPathMonitor`, incl. which interface carries the default route), connectivity probe (HTTPS first; plain-HTTP fallback to distinguish a captive portal from being offline), fetcher wiring, notifier, UserDefaults-backed settings, login item.
+- `Sources/ExitIPApp` — a thin AppKit shell: status item + menu, network watcher (`NWPathMonitor`, incl. which interface carries the default route), connectivity probe (HTTPS first; plain-HTTP fallback *bound to the physical interface* — bypassing any VPN/proxy TUN and its DNS hijack — to distinguish a captive portal from being offline and to catch the portal's redirect URL), default-route probe (finds a proxy's TUN device that `NWPathMonitor` doesn't list), fetcher wiring, notifier, UserDefaults-backed settings, login item.
 - `Tests/ExitIPCoreTests` — 122 unit tests covering the core logic.
 
 Persisted state lives in UserDefaults under `com.lec77.ipinfo` (notifications toggle, expected country, last untunneled exit, history).

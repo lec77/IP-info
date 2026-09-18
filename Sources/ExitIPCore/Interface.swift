@@ -2,6 +2,15 @@ import Network
 
 public enum InterfaceKind: Sendable, Equatable {
     case wifi, wired, cellular, tunnel, loopback, other
+
+    /// Traffic on this interface leaves the machine directly — the interface to
+    /// bind to when a request must not go through a tunnel.
+    public var isPhysical: Bool {
+        switch self {
+        case .wifi, .wired, .cellular: return true
+        case .tunnel, .loopback, .other: return false
+        }
+    }
 }
 
 /// The interface carrying the default route.

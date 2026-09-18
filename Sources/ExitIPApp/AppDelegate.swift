@@ -13,6 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model = ExitIPModel()
     private var paused = false
     private var latencyMs: Int?
+    /// Sign-in target from the last probe that saw a portal; shown while the
+    /// model is in the portal state.
+    private var portalSignIn: PortalSignIn?
+    /// Whether the default route currently goes through a tunnel, per the last probe.
+    private var viaTunnel = false
     private var lastCheckedDate: Date?
     private var pollTimer: Timer?
     private var debounceWorkItem: DispatchWorkItem?
@@ -28,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onToggleLogin = { [weak self] in self?.toggleLogin() }
         controller.onSetExpectedCountry = { [weak self] code in self?.setExpectedCountry(code) }
         controller.onClearHistory = { [weak self] in self?.clearHistory() }
-        controller.onOpenSignIn = { NSWorkspace.shared.open(Config.captivePortalSignInURL) }
+        controller.onOpenSignIn = { url in NSWorkspace.shared.open(url) }
 
         if settings.notificationsEnabled { notifier.requestAuthorization() }
 
@@ -65,10 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isRefreshing = true
         let includeIPv6 = shouldLookupIPv6(pathSupportsIPv6: watcher.supportsIPv6, interface: watcher.interface)
         Task { @MainActor in
-            let (verdict, latency) = await probe.check()
-            self.latencyMs = latency
+            let result = await probe.check(physicalInterface: watcher.physicalInterface)
+            let verdict = result.verdict
+            self.latencyMs = result.latencyMs
+            self.portalSignIn = verdict == .captivePortal ? ExitIPCore.portalSignIn(redirect: result.portalRedirect) : nil
+            self.viaTunnel = await RouteProbe.defaultRouteInterface()?.kind == .tunnel
             let snapshot = (verdict == .reachable) ? await self.resolver.resolve(includeIPv6: includeIPv6) : nil
-            NSLog("check: probe=\(verdict) latency=\(latency.map(String.init) ?? "-")ms exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-")" } ?? "none")")
+            NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms portal=\(result.portalRedirect?.absoluteString ?? "-") tunnel=\(self.viaTunnel) exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-")" } ?? "none")")
             self.isRefreshing = false
             guard !self.paused else { return } // paused mid-flight: drop the result
             self.apply(outcome: combinedOutcome(probe: verdict, fetched: snapshot))
@@ -122,6 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             interface: watcher.interface,
             latencyMs: latencyMs,
             lastCheckedDate: lastCheckedDate,
+            portalSignIn: model.phase == .failed(.captivePortal) ? portalSignIn : nil,
+            viaTunnel: viaTunnel,
             history: settings.history,
             expectedCountryCode: settings.expectedCountryCode,
             notificationsEnabled: settings.notificationsEnabled,

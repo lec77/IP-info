@@ -8,6 +8,9 @@ struct MenuState {
     var interface: ActiveInterface?
     var latencyMs: Int?
     var lastCheckedDate: Date?
+    /// Set only while a captive portal is detected.
+    var portalSignIn: PortalSignIn?
+    var viaTunnel = false
     var history: [IPChangeEvent] = []
     var expectedCountryCode: String?
     var notificationsEnabled = Config.notificationsEnabledByDefault
@@ -26,7 +29,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onToggleLogin: () -> Void = {}
     var onSetExpectedCountry: (String?) -> Void = { _ in }
     var onClearHistory: () -> Void = {}
-    var onOpenSignIn: () -> Void = {}
+    var onOpenSignIn: (URL) -> Void = { _ in }
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -77,8 +80,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let checkedAgo = state.lastCheckedDate.map { Int(now.timeIntervalSince($0)) } ?? 0
         menu.addItem(disabledItem(lastCheckedText(secondsAgo: checkedAgo)))
 
-        if state.model.phase == .failed(.captivePortal) {
-            menu.addItem(actionItem("Open sign-in page…", #selector(openSignIn), key: ""))
+        // Always offered: portal detection can miss (e.g. the portal only
+        // intercepts some traffic), and macOS's own assistant only checks on join.
+        let portalHost = state.portalSignIn.flatMap { $0.url.host }
+        menu.addItem(actionItem(signInMenuTitle(portalHost: portalHost), #selector(openSignIn), key: ""))
+        if let signIn = state.portalSignIn, let hint = signInHint(signIn, viaTunnel: state.viaTunnel) {
+            menu.addItem(disabledItem(hint))
         }
 
         let warnings = state.model.activeWarnings
@@ -193,6 +200,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleNotifications() { onToggleNotifications() }
     @objc private func toggleLogin() { onToggleLogin() }
     @objc private func clearHistory() { onClearHistory() }
-    @objc private func openSignIn() { onOpenSignIn() }
+    @objc private func openSignIn() { onOpenSignIn(state.portalSignIn?.url ?? Config.captivePortalSignInURL) }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 }

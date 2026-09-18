@@ -14,9 +14,25 @@ func placeLabel(for info: IPInfo) -> String {
 
 /// Menu-bar title. Prefix legend: "⛔" the exit is not where you expect it,
 /// "⚠︎" degraded (offline, portal, partial geo) or a leak warning, "⏸" paused.
-public func menuBarTitle(for model: ExitIPModel, paused: Bool = false) -> String {
+/// While a check is running, `checkingTick` adds a spinner frame in front.
+public func menuBarTitle(for model: ExitIPModel, paused: Bool = false, checkingTick: Int? = nil) -> String {
     let base = baseTitle(for: model)
-    return paused ? "⏸ \(base)" : base
+    let titled = paused ? "⏸ \(base)" : base
+    guard let checkingTick else { return titled }
+    return "\(spinnerFrame(checkingTick)) \(titled)"
+}
+
+private let spinnerFrames: [Character] = Array("◐◓◑◒")
+
+/// One frame of the in-progress spinner; call with an increasing tick.
+public func spinnerFrame(_ tick: Int) -> String {
+    String(spinnerFrames[((tick % spinnerFrames.count) + spinnerFrames.count) % spinnerFrames.count])
+}
+
+/// "Checking.", "Checking..", "Checking..." — the "last checked" line's
+/// stand-in while a check is running.
+public func checkingText(tick: Int) -> String {
+    "Checking" + String(repeating: ".", count: ((tick % 3) + 3) % 3 + 1)
 }
 
 private func baseTitle(for model: ExitIPModel) -> String {

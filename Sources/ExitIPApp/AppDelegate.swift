@@ -80,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !paused, !isRefreshing else { return }
         guard watcher.isOnline else { latencyMs = nil; apply(outcome: .failure(.offline)); return }
         isRefreshing = true
+        rerender()
         Task { @MainActor in
             self.routeInterface = await RouteProbe.defaultRouteInterface()
             let includeIPv6 = shouldLookupIPv6(pathSupportsIPv6: watcher.supportsIPv6, interface: activeInterface)
@@ -100,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms directOnly=\(result.reachedOnlyDirectly) portal=\(result.portalRedirect?.absoluteString ?? "-") route=\(self.routeInterface?.name ?? "-") exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-") dns=\($0.dnsResolver?.ip ?? "-")" } ?? "none")")
             self.isRefreshing = false
+            self.rerender() // stop the spinner even when the result below is held back
             guard !self.paused else { return } // paused mid-flight: drop the result
             self.apply(outcome: combinedOutcome(
                 probe: verdict, fetched: snapshot,
@@ -156,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyMs: latencyMs,
             latencyHistory: latencyHistory,
             lastCheckedDate: lastCheckedDate,
+            checking: isRefreshing,
             portalSignIn: model.phase == .failed(.captivePortal) ? portalSignIn : nil,
             viaTunnel: viaTunnel,
             history: settings.history,

@@ -9,6 +9,8 @@ struct MenuState {
     var latencyMs: Int?
     var latencyHistory: [Int?] = []
     var lastCheckedDate: Date?
+    /// A check is in flight: the title spins and "last checked" reads "Checking…".
+    var checking = false
     /// Set only while a captive portal is detected.
     var portalSignIn: PortalSignIn?
     var viaTunnel = false
@@ -23,6 +25,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private var state = MenuState()
+    private var spinnerTimer: Timer?
+    private var spinnerTick = 0
+    /// The "last checked" row, kept so the spinner can update it while the menu is open.
+    private weak var lastCheckedItem: NSMenuItem?
 
     var onRefresh: () -> Void = {}
     var onTogglePause: () -> Void = {}
@@ -42,8 +48,34 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     func update(_ state: MenuState) {
+        let wasChecking = self.state.checking
         self.state = state
+        if state.checking != wasChecking { state.checking ? startSpinner() : stopSpinner() }
         render()
+    }
+
+    private func startSpinner() {
+        spinnerTick = 0
+        spinnerTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.spin() }
+        }
+        // Keep spinning while the menu is open (menu tracking runs its own run-loop mode).
+        RunLoop.main.add(spinnerTimer!, forMode: .eventTracking)
+    }
+
+    private func stopSpinner() {
+        spinnerTimer?.invalidate()
+        spinnerTimer = nil
+    }
+
+    private func spin() {
+        spinnerTick += 1
+        statusItem.button?.title = title
+        lastCheckedItem?.title = checkingText(tick: spinnerTick)
+    }
+
+    private var title: String {
+        menuBarTitle(for: state.model, paused: state.paused, checkingTick: state.checking ? spinnerTick : nil)
     }
 
     // Re-render on open so the time-based lines ("last checked", "unchanged for")
@@ -53,7 +85,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func render() {
-        statusItem.button?.title = menuBarTitle(for: state.model, paused: state.paused)
+        statusItem.button?.title = title
         populateMenu()
     }
 
@@ -80,7 +112,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(disabledItem(stableForText(seconds: seconds)))
         }
         let checkedAgo = state.lastCheckedDate.map { Int(now.timeIntervalSince($0)) } ?? 0
-        menu.addItem(disabledItem(lastCheckedText(secondsAgo: checkedAgo)))
+        let lastChecked = disabledItem(state.checking ? checkingText(tick: spinnerTick) : lastCheckedText(secondsAgo: checkedAgo))
+        lastCheckedItem = lastChecked
+        menu.addItem(lastChecked)
 
         // Always offered: portal detection can miss (e.g. the portal only
         // intercepts some traffic), and macOS's own assistant only checks on join.

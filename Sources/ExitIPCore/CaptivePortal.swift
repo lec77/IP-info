@@ -88,26 +88,12 @@ public func signInMenuTitle(_ status: PortalStatus) -> String {
     return "Open sign-in page…"
 }
 
-/// The coloured status pill shown beside the sign-in item.
-public struct SignInBadge: Sendable, Equatable {
-    public enum Tone: Sendable, Equatable {
-        case alert, ok, neutral
-    }
-
-    public var text: String
-    public var tone: Tone
-
-    public init(text: String, tone: Tone) {
-        self.text = text
-        self.tone = tone
-    }
-}
-
-public func signInBadge(_ status: PortalStatus) -> SignInBadge {
+/// The status badge shown at the trailing edge of the sign-in item.
+public func signInBadge(_ status: PortalStatus) -> String {
     switch status {
-    case .signInRequired: return SignInBadge(text: "Sign-in required", tone: .alert)
-    case .notDetected: return SignInBadge(text: "No portal", tone: .ok)
-    case .unknown: return SignInBadge(text: "Unknown", tone: .neutral)
+    case .signInRequired: return "Sign-in required"
+    case .notDetected: return "No portal"
+    case .unknown: return "Unknown"
     }
 }
 

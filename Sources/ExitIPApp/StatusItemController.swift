@@ -26,6 +26,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private var state = MenuState()
+    private let checkingMark = CheckingMark()
 
     var onRefresh: () -> Void = {}
     var onTogglePause: () -> Void = {}
@@ -86,9 +87,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let checkedAgo = state.lastCheckedDate.map { Int(now.timeIntervalSince($0)) } ?? 0
         if state.checking {
             let item = disabledItem(checkingText)
-            item.view = CheckingMenuItemView(title: checkingText)
+            checkingMark.start(on: item)
             menu.addItem(item)
         } else {
+            checkingMark.stop()
             menu.addItem(disabledItem(lastCheckedText(secondsAgo: checkedAgo)))
         }
 
@@ -107,7 +109,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // intercepts some traffic), and macOS's own assistant only checks on join.
         let status = portalStatus(for: state.model, signIn: state.portalSignIn)
         let signInItem = actionItem(signInMenuTitle(status), #selector(openSignIn), key: "")
-        signInItem.view = BadgedMenuItemView(title: signInItem.title, badge: signInBadge(status))
+        let badge = signInBadge(status)
+        if #available(macOS 14, *) {
+            signInItem.badge = NSMenuItemBadge(string: badge)
+        } else {
+            signInItem.title = "\(signInItem.title)  —  \(badge)"
+        }
         menu.addItem(signInItem)
         if let signIn = state.portalSignIn, let hint = signInHint(signIn, viaTunnel: state.viaTunnel) {
             menu.addItem(disabledItem(hint))

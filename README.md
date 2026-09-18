@@ -12,7 +12,7 @@ A tiny native macOS **menu bar app** that shows your current **exit (public) IP*
 - **IPv4 + IPv6.** Both exits are looked up (hosts without IPv6 just show IPv4). If IPv6 exits in a different country than IPv4 — or, on a tunnel, via a different ISP — that's the classic IPv6 leak and it's flagged.
 - **DNS leak detection.** Every 5 minutes a poll asks an authoritative server which resolver looked up a one-off name (`DNS: 🇺🇸 Google LLC` in the dropdown); a resolver in a different country than the exit is flagged.
 - **History.** *History ▸* lists recent exit changes (`14:05  🇺🇸 → 🇩🇪  5.6.7.8`, click to copy) and the dropdown shows "Unchanged for 3h 12m". Persisted, so a change that happened while the app wasn't running is still recorded at launch.
-- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the *Open sign-in page…* item is always there with a coloured status pill — *Sign-in required* / *No portal* / *Unknown* — and opens the portal's own login URL, warning when a VPN/proxy tunnel would swallow it), `⚠︎ tunnel down` when the physical network works but nothing gets through the VPN/proxy tunnel, and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown with a sparkline of the last 12 checks.
+- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the *Open sign-in page…* item is always there with a status badge — *Sign-in required* / *No portal* / *Unknown* — and opens the portal's own login URL, warning when a VPN/proxy tunnel would swallow it), `⚠︎ tunnel down` when the physical network works but nothing gets through the VPN/proxy tunnel, and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown with a sparkline of the last 12 checks.
 - **Notifications** on exit change, connectivity loss/restore, captive portal (with an *Open sign-in page* button), tunnel down, and every warning above (toggle in the menu; the setting persists).
 - **Pause monitoring** (`⏸` in the title) when you don't want the traffic — e.g. on a metered connection.
 - **Launch at login** toggle (via `SMAppService`).
@@ -42,7 +42,7 @@ Last checked: just now
 ⚠︎ IPv6 exits via 🇺🇸 Comcast — possible leak   ← only when something is wrong
 ────────────────────────────
 Refresh now                 ⌘R
-Open sign-in page…        [No portal]   ← pill: Sign-in required / No portal / Unknown
+Open sign-in page…          No portal   ← badge: Sign-in required / No portal / Unknown
 Pause monitoring
 Expected exit            ▸   Off / 🇩🇪 Germany (current) / 🇺🇸 United States …
 Check every              ▸   15 seconds / 30 seconds / 1 minute ✓ / 2 minutes / 5 minutes / 10 minutes

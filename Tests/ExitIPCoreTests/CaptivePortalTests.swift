@@ -122,10 +122,10 @@ final class CaptivePortalTests: XCTestCase {
     }
 
     func testBadgeSaysWhetherSignInIsNeeded() {
-        XCTAssertEqual(signInBadge(.signInRequired(host: "10.93.115.1")), SignInBadge(text: "Sign-in required", tone: .alert))
-        XCTAssertEqual(signInBadge(.signInRequired(host: nil)), SignInBadge(text: "Sign-in required", tone: .alert))
-        XCTAssertEqual(signInBadge(.notDetected), SignInBadge(text: "No portal", tone: .ok))
-        XCTAssertEqual(signInBadge(.unknown), SignInBadge(text: "Unknown", tone: .neutral))
+        XCTAssertEqual(signInBadge(.signInRequired(host: "10.93.115.1")), "Sign-in required")
+        XCTAssertEqual(signInBadge(.signInRequired(host: nil)), "Sign-in required")
+        XCTAssertEqual(signInBadge(.notDetected), "No portal")
+        XCTAssertEqual(signInBadge(.unknown), "Unknown")
     }
 
     func testTunnelHintOnlyForNonLocalPagesOnATunnel() {

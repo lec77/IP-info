@@ -5,7 +5,7 @@
 #   ./build-app.sh --install    # …and copy to /Applications
 #
 # Environment:
-#   VERSION            CFBundleShortVersionString (default 1.1.1)
+#   VERSION            CFBundleShortVersionString (default 1.2.0)
 #   BUILD              CFBundleVersion (default: git commit count)
 #   CODESIGN_IDENTITY  "-" (ad-hoc, default) or a "Developer ID Application: …"
 #                      identity for distribution — see release.sh.
@@ -14,7 +14,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="IP-info"
 APP="$ROOT/$APP_NAME.app"
-VERSION="${VERSION:-1.1.1}"
+VERSION="${VERSION:-1.2.0}"
 BUILD="${BUILD:-$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)}"
 IDENTITY="${CODESIGN_IDENTITY:--}"
 

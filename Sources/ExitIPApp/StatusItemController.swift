@@ -16,6 +16,7 @@ struct MenuState {
     var viaTunnel = false
     var history: [IPChangeEvent] = []
     var expectedCountryCode: String?
+    var pollInterval = Config.pollInterval
     var notificationsEnabled = Config.notificationsEnabledByDefault
     var loginEnabled = false
 }
@@ -25,10 +26,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private var state = MenuState()
-    /// Rotates beside the title while a check is in flight; lives inside the
-    /// status item's button, over the space an (empty) leading image reserves.
-    private let spinner = RotatingSymbolView(pointSize: 12, color: .labelColor)
-    private static let spinnerSlot = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { _ in true }
 
     var onRefresh: () -> Void = {}
     var onTogglePause: () -> Void = {}
@@ -36,6 +33,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onToggleLogin: () -> Void = {}
     var onSetExpectedCountry: (String?) -> Void = { _ in }
     var onClearHistory: () -> Void = {}
+    var onSetPollInterval: (TimeInterval) -> Void = { _ in }
     var onOpenSignIn: (URL) -> Void = { _ in }
 
     override init() {
@@ -44,30 +42,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         menu.delegate = self
         statusItem.menu = menu
-        statusItem.button?.addSubview(spinner)
-        statusItem.button?.imagePosition = .imageLeading
         render()
     }
 
     func update(_ state: MenuState) {
         self.state = state
         render()
-    }
-
-    /// Shows or hides the title spinner. A blank 16 pt image reserves its slot
-    /// so the title shifts right by exactly that much while it's visible.
-    private func layoutSpinner() {
-        guard let button = statusItem.button else { return }
-        if state.checking {
-            button.image = Self.spinnerSlot
-            let slot = (button.cell as? NSButtonCell)?.imageRect(forBounds: button.bounds) ?? NSRect(x: 4, y: 3, width: 16, height: 16)
-            let side = spinner.frame.size
-            spinner.frame = NSRect(x: slot.midX - side.width / 2, y: slot.midY - side.height / 2, width: side.width, height: side.height)
-            spinner.isAnimating = true
-        } else {
-            spinner.isAnimating = false
-            button.image = nil
-        }
     }
 
     // Re-render on open so the time-based lines ("last checked", "unchanged for")
@@ -78,7 +58,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func render() {
         statusItem.button?.title = menuBarTitle(for: state.model, paused: state.paused)
-        layoutSpinner()
         populateMenu()
     }
 
@@ -142,6 +121,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         expected.submenu = buildExpectedMenu()
         menu.addItem(expected)
 
+        let interval = NSMenuItem(title: "Check every", action: nil, keyEquivalent: "")
+        interval.submenu = buildIntervalMenu()
+        menu.addItem(interval)
+
         let historyItem = NSMenuItem(title: "History", action: nil, keyEquivalent: "")
         historyItem.submenu = buildHistoryMenu(now: now)
         menu.addItem(historyItem)
@@ -177,6 +160,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let item = actionItem(title, #selector(setExpectedCountry), key: "")
             item.representedObject = code
             item.state = code == selected ? .on : .off
+            sub.addItem(item)
+        }
+        return sub
+    }
+
+    private func buildIntervalMenu() -> NSMenu {
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+        for seconds in Config.pollIntervalChoices {
+            let item = actionItem(pollIntervalLabel(seconds), #selector(setPollInterval), key: "")
+            item.representedObject = seconds
+            item.state = seconds == state.pollInterval ? .on : .off
             sub.addItem(item)
         }
         return sub
@@ -228,6 +223,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func setExpectedCountry(_ sender: NSMenuItem) {
         onSetExpectedCountry(sender.representedObject as? String)
+    }
+
+    @objc private func setPollInterval(_ sender: NSMenuItem) {
+        guard let seconds = sender.representedObject as? TimeInterval else { return }
+        onSetPollInterval(seconds)
     }
 
     @objc private func refresh() { onRefresh() }

@@ -88,28 +88,53 @@ final class RotatingSymbolView: NSView {
     }
 }
 
+/// Where AppKit puts things in a standard menu row, measured off an
+/// `NSMenuItemCell` so custom rows line up with native ones exactly.
+enum MenuRowMetrics {
+    static var rowHeight: CGFloat { probe.height }
+    /// x where the title text starts.
+    static var titleX: CGFloat { probe.titleX }
+    /// x of the middle of the check-mark column.
+    static var stateCenterX: CGFloat { probe.stateCenterX }
+    /// Space kept clear at the trailing edge (where "⌘R" would sit).
+    static let trailing: CGFloat = 12
+
+    static let font = NSFont.menuFont(ofSize: 0)
+
+    private static let probe: (height: CGFloat, titleX: CGFloat, stateCenterX: CGFloat) = {
+        let item = NSMenuItem(title: "Probe", action: nil, keyEquivalent: "")
+        item.state = .on
+        let cell = NSMenuItemCell()
+        cell.menuItem = item
+        cell.font = font
+        let height = cell.cellSize.height
+        let bounds = NSRect(x: 0, y: 0, width: 300, height: height)
+        return (height, cell.titleRect(forBounds: bounds).minX, cell.stateImageRect(forBounds: bounds).midX)
+    }()
+}
+
 /// The "Last checked" row while a check is running: the rotating mark in the
 /// check-mark column, then the usual greyed "Label: value" text.
 final class CheckingMenuItemView: NSView {
     init(title: String) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 22))
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: MenuRowMetrics.rowHeight))
         autoresizingMask = [.width]
         let mark = RotatingSymbolView(pointSize: 11, color: .disabledControlTextColor)
         let label = NSTextField(labelWithString: title)
-        label.font = .menuFont(ofSize: 0)
+        label.font = MenuRowMetrics.font
         label.textColor = .disabledControlTextColor
         for view in [mark, label] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
         NSLayoutConstraint.activate([
-            mark.centerXAnchor.constraint(equalTo: leadingAnchor, constant: 11),
+            mark.centerXAnchor.constraint(equalTo: leadingAnchor, constant: MenuRowMetrics.stateCenterX),
             mark.centerYAnchor.constraint(equalTo: centerYAnchor),
             mark.widthAnchor.constraint(equalToConstant: mark.frame.width),
             mark.heightAnchor.constraint(equalToConstant: mark.frame.height),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 21),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MenuRowMetrics.titleX),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -MenuRowMetrics.trailing),
         ])
         mark.isAnimating = true
     }

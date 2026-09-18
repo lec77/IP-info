@@ -19,7 +19,9 @@ public enum Config {
     ]
     public static let geoCacheLimit = 64
 
+    /// Default poll interval and the choices offered under "Check every ▸".
     public static let pollInterval: TimeInterval = 60
+    public static let pollIntervalChoices: [TimeInterval] = [15, 30, 60, 120, 300, 600]
     public static let networkChangeDebounce: TimeInterval = 1.5
     public static let requestTimeout: TimeInterval = 10
     /// Hosts without IPv6 usually fail fast, but a broken IPv6 path can hang; keep it short.
@@ -59,8 +61,8 @@ public enum Config {
     }
 
     /// The resolver check takes several seconds (the endpoint waits for the
-    /// query to arrive), so it runs on every Nth poll rather than every one.
-    public static let dnsCheckEveryPolls = 5
+    /// query to arrive), so it runs at most this often rather than every poll.
+    public static let dnsCheckInterval: TimeInterval = 300
 
     /// Latency samples kept for the trend sparkline in the menu.
     public static let latencyHistoryLimit = 12

@@ -212,4 +212,11 @@ final class ExitResolverTests: XCTestCase {
         XCTAssertEqual(carryForwardResolver(ExitSnapshot(primary: IPInfo(ip: "2.2.2.2")), from: previous).dnsResolver, dns, "carried even across an exit change; the caller forces a fresh check")
         XCTAssertEqual(carryForwardResolver(ExitSnapshot(primary: IPInfo(ip: "1.1.1.1"), dnsResolver: fresh), from: previous).dnsResolver, fresh, "a fresh reading wins")
     }
+
+    func testDNSCheckDue() {
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertTrue(dnsCheckDue(lastCheck: nil, now: t0, interval: 300))
+        XCTAssertFalse(dnsCheckDue(lastCheck: t0, now: t0.addingTimeInterval(299), interval: 300))
+        XCTAssertTrue(dnsCheckDue(lastCheck: t0, now: t0.addingTimeInterval(300), interval: 300))
+    }
 }

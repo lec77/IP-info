@@ -10,16 +10,11 @@ final class BadgedMenuItemView: NSView {
     private let pill = NSView()
     private var tint: NSColor = .systemGray
 
-    // Matches the standard row: text starts past the check-mark column.
-    private static let leading: CGFloat = 21
-    private static let trailing: CGFloat = 12
-    private static let rowHeight: CGFloat = 24
-
     init(title: String, badge: SignInBadge) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: Self.rowHeight))
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: MenuRowMetrics.rowHeight))
         autoresizingMask = [.width]
 
-        titleLabel.font = .menuFont(ofSize: 0)
+        titleLabel.font = MenuRowMetrics.font
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
@@ -36,11 +31,11 @@ final class BadgedMenuItemView: NSView {
         pill.addSubview(badgeLabel)
 
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.leading),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MenuRowMetrics.titleX),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: pill.leadingAnchor, constant: -12),
 
-            pill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.trailing),
+            pill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -MenuRowMetrics.trailing),
             pill.centerYAnchor.constraint(equalTo: centerYAnchor),
             pill.heightAnchor.constraint(equalToConstant: 16),
 

@@ -75,7 +75,7 @@ final class ConnectivityTests: XCTestCase {
         let token = Config.randomDNSToken()
         XCTAssertEqual(token.count, 32, "the endpoint only answers UUID-shaped labels")
         XCTAssertTrue(token.allSatisfy { "0123456789abcdef".contains($0) })
-        XCTAssertEqual(Config.dnsCheckEveryPolls, 5)
+        XCTAssertEqual(Config.dnsCheckInterval, 300)
         XCTAssertNotNil(Config.dnsProbeURL(token: token))
         XCTAssertNotEqual(Config.randomDNSToken(), token)
     }

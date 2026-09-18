@@ -1,3 +1,5 @@
+import Foundation
+
 /// Compact menu-bar label: country flag + city (e.g. "🇺🇸 San Jose"), kept short
 /// so it doesn't get clipped behind the menu-bar notch. Degrades to flag-only,
 /// city-only, then the IP when those fields are missing. (Full IP lives in the
@@ -66,6 +68,22 @@ public func locationLine(for info: IPInfo) -> String? {
 public func ispLine(for info: IPInfo) -> String? {
     guard let isp = info.isp, !isp.isEmpty else { return nil }
     return "ISP: \(isp)"
+}
+
+/// "15 seconds", "1 minute", "5 minutes" — a poll-interval choice.
+public func pollIntervalLabel(_ seconds: TimeInterval) -> String {
+    let s = Int(seconds.rounded())
+    if s < 60 { return "\(s) second\(s == 1 ? "" : "s")" }
+    let m = s / 60
+    if s % 60 == 0 { return "\(m) minute\(m == 1 ? "" : "s")" }
+    return "\(m) min \(s % 60) s"
+}
+
+/// The valid poll interval for a stored value: the value itself when it's one
+/// of the offered choices, otherwise the default.
+public func validPollInterval(_ stored: TimeInterval?) -> TimeInterval {
+    guard let stored, Config.pollIntervalChoices.contains(stored) else { return Config.pollInterval }
+    return stored
 }
 
 /// "45s", "12m", "3h 12m", "2h", "2d 5h".

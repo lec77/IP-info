@@ -117,6 +117,12 @@ public struct ExitResolver: Sendable {
     }
 }
 
+/// Whether the resolver check is due: never done, or `interval` has elapsed.
+public func dnsCheckDue(lastCheck: Date?, now: Date, interval: TimeInterval = Config.dnsCheckInterval) -> Bool {
+    guard let lastCheck else { return true }
+    return now.timeIntervalSince(lastCheck) >= interval
+}
+
 /// A reading without a resolver check keeps the previous reading's resolver,
 /// so the DNS-leak warning doesn't clear and re-fire between checks. Whether
 /// the carried reading is still current is the caller's problem (it should

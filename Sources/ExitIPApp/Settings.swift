@@ -10,6 +10,7 @@ final class SettingsStore {
         static let expectedCountryCode = "expectedCountryCode"
         static let homeExit = "homeExit"
         static let history = "history"
+        static let pollInterval = "pollInterval"
     }
 
     private let defaults: UserDefaults
@@ -26,6 +27,9 @@ final class SettingsStore {
     var history: [IPChangeEvent] {
         didSet { if history != oldValue { defaults.set(Self.encode(history), forKey: Key.history) } }
     }
+    var pollInterval: TimeInterval {
+        didSet { if pollInterval != oldValue { defaults.set(pollInterval, forKey: Key.pollInterval) } }
+    }
 
     init(defaults: UserDefaults = .standard) {
         defaults.register(defaults: [Key.notificationsEnabled: Config.notificationsEnabledByDefault])
@@ -34,6 +38,7 @@ final class SettingsStore {
         expectedCountryCode = defaults.string(forKey: Key.expectedCountryCode)
         homeExit = Self.decode(defaults.data(forKey: Key.homeExit))
         history = Self.decode(defaults.data(forKey: Key.history)) ?? []
+        pollInterval = validPollInterval(defaults.object(forKey: Key.pollInterval) as? TimeInterval)
     }
 
     private static func decode<T: Decodable>(_ data: Data?) -> T? {

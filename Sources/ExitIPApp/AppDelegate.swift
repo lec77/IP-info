@@ -31,8 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recheckWorkItem: DispatchWorkItem?
     private var isRefreshing = false
     private var failureStreak = 0
-    /// Polls since the last DNS-resolver check; the first check always runs one.
-    private var pollsSinceDNSCheck = Config.dnsCheckEveryPolls
+    /// When the DNS resolver was last checked; nil forces one on the next poll.
+    private var lastDNSCheck: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         controller = StatusItemController() // create the status item after the app finishes launching
@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onToggleLogin = { [weak self] in self?.toggleLogin() }
         controller.onSetExpectedCountry = { [weak self] code in self?.setExpectedCountry(code) }
         controller.onClearHistory = { [weak self] in self?.clearHistory() }
+        controller.onSetPollInterval = { [weak self] seconds in self?.setPollInterval(seconds) }
         controller.onOpenSignIn = { url in NSWorkspace.shared.open(url) }
         notifier.onOpenSignIn = { [weak self] in self?.openSignIn() }
 
@@ -54,10 +55,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher.start()
 
         rerender()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: Config.pollInterval, repeats: true) { [weak self] _ in
+        schedulePolling()
+        refresh()
+    }
+
+    private func schedulePolling() {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: settings.pollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
-        refresh()
+    }
+
+    private func setPollInterval(_ seconds: TimeInterval) {
+        settings.pollInterval = validPollInterval(seconds)
+        schedulePolling()
+        rerender()
     }
 
     private func handlePathChange(online: Bool) {
@@ -89,14 +101,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.latencyMs = result.latencyMs
             self.latencyHistory = (self.latencyHistory + [result.latencyMs]).suffix(Config.latencyHistoryLimit)
             self.portalSignIn = verdict == .captivePortal ? ExitIPCore.portalSignIn(redirect: result.portalRedirect) : nil
-            let includeDNS = self.pollsSinceDNSCheck >= Config.dnsCheckEveryPolls
+            let includeDNS = dnsCheckDue(lastCheck: self.lastDNSCheck, now: Date())
             var snapshot = (verdict == .reachable) ? await self.resolver.resolve(includeIPv6: includeIPv6, includeDNS: includeDNS) : nil
             if let fresh = snapshot {
-                self.pollsSinceDNSCheck = fresh.dnsResolver == nil ? self.pollsSinceDNSCheck + 1 : 0
+                if fresh.dnsResolver != nil { self.lastDNSCheck = Date() }
                 // A new exit may well mean a new resolver: check again on the next poll.
-                if fresh.dnsResolver == nil, fresh.primary.ip != self.model.lastGoodIP?.ip {
-                    self.pollsSinceDNSCheck = Config.dnsCheckEveryPolls
-                }
+                if fresh.dnsResolver == nil, fresh.primary.ip != self.model.lastGoodIP?.ip { self.lastDNSCheck = nil }
                 snapshot = carryForwardResolver(fresh, from: self.model.lastGood)
             }
             NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms directOnly=\(result.reachedOnlyDirectly) portal=\(result.portalRedirect?.absoluteString ?? "-") route=\(self.routeInterface?.name ?? "-") exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-") dns=\($0.dnsResolver?.ip ?? "-")" } ?? "none")")
@@ -163,6 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             viaTunnel: viaTunnel,
             history: settings.history,
             expectedCountryCode: settings.expectedCountryCode,
+            pollInterval: settings.pollInterval,
             notificationsEnabled: settings.notificationsEnabled,
             loginEnabled: LoginItem.isEnabled
         ))

@@ -159,4 +159,22 @@ final class DisplayFormattingTests: XCTestCase {
         XCTAssertEqual(exitSummary(full), "🇺🇸 San Jose · 1.2.3.4")
         XCTAssertEqual(exitSummary(IPInfo(ip: "1.2.3.4")), "1.2.3.4")
     }
+
+    func testPollIntervalLabel() {
+        XCTAssertEqual(pollIntervalLabel(15), "15 seconds")
+        XCTAssertEqual(pollIntervalLabel(1), "1 second")
+        XCTAssertEqual(pollIntervalLabel(60), "1 minute")
+        XCTAssertEqual(pollIntervalLabel(120), "2 minutes")
+        XCTAssertEqual(pollIntervalLabel(600), "10 minutes")
+        XCTAssertEqual(pollIntervalLabel(90), "1 min 30 s")
+    }
+
+    func testValidPollInterval() {
+        XCTAssertTrue(Config.pollIntervalChoices.contains(Config.pollInterval))
+        XCTAssertEqual(Config.pollIntervalChoices, Config.pollIntervalChoices.sorted())
+        XCTAssertEqual(validPollInterval(nil), Config.pollInterval)
+        XCTAssertEqual(validPollInterval(300), 300)
+        XCTAssertEqual(validPollInterval(7), Config.pollInterval, "not an offered choice")
+        XCTAssertEqual(validPollInterval(0), Config.pollInterval)
+    }
 }

@@ -25,10 +25,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let menu = NSMenu()
     private var state = MenuState()
-    private var spinnerTimer: Timer?
-    private var spinnerTick = 0
-    /// The "last checked" row, kept so the spinner can update it while the menu is open.
-    private weak var lastCheckedItem: NSMenuItem?
+    /// Spins beside the title while a check is in flight; lives inside the
+    /// status item's button, over the space an (empty) leading image reserves.
+    private let spinner = SpinnerFactory.make()
+    private static let spinnerSlot = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { _ in true }
 
     var onRefresh: () -> Void = {}
     var onTogglePause: () -> Void = {}
@@ -44,38 +44,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         menu.delegate = self
         statusItem.menu = menu
+        statusItem.button?.addSubview(spinner)
+        statusItem.button?.imagePosition = .imageLeading
         render()
     }
 
     func update(_ state: MenuState) {
-        let wasChecking = self.state.checking
         self.state = state
-        if state.checking != wasChecking { state.checking ? startSpinner() : stopSpinner() }
         render()
     }
 
-    private func startSpinner() {
-        spinnerTick = 0
-        spinnerTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.spin() }
+    /// Shows or hides the title spinner. A blank 16 pt image reserves its slot
+    /// so the title shifts right by exactly that much while it's visible.
+    private func layoutSpinner() {
+        guard let button = statusItem.button else { return }
+        if state.checking {
+            button.image = Self.spinnerSlot
+            let slot = (button.cell as? NSButtonCell)?.imageRect(forBounds: button.bounds) ?? NSRect(x: 4, y: 3, width: 16, height: 16)
+            spinner.frame = NSRect(x: slot.midX - 8, y: slot.midY - 8, width: 16, height: 16)
+            spinner.startAnimation(nil)
+        } else {
+            spinner.stopAnimation(nil)
+            button.image = nil
         }
-        // Keep spinning while the menu is open (menu tracking runs its own run-loop mode).
-        RunLoop.main.add(spinnerTimer!, forMode: .eventTracking)
-    }
-
-    private func stopSpinner() {
-        spinnerTimer?.invalidate()
-        spinnerTimer = nil
-    }
-
-    private func spin() {
-        spinnerTick += 1
-        statusItem.button?.title = title
-        lastCheckedItem?.title = checkingText(tick: spinnerTick)
-    }
-
-    private var title: String {
-        menuBarTitle(for: state.model, paused: state.paused, checkingTick: state.checking ? spinnerTick : nil)
     }
 
     // Re-render on open so the time-based lines ("last checked", "unchanged for")
@@ -85,7 +76,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func render() {
-        statusItem.button?.title = title
+        statusItem.button?.title = menuBarTitle(for: state.model, paused: state.paused)
+        layoutSpinner()
         populateMenu()
     }
 
@@ -112,9 +104,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(disabledItem(stableForText(seconds: seconds)))
         }
         let checkedAgo = state.lastCheckedDate.map { Int(now.timeIntervalSince($0)) } ?? 0
-        let lastChecked = disabledItem(state.checking ? checkingText(tick: spinnerTick) : lastCheckedText(secondsAgo: checkedAgo))
-        lastCheckedItem = lastChecked
-        menu.addItem(lastChecked)
+        if state.checking {
+            let item = disabledItem(checkingText)
+            item.view = SpinnerMenuItemView(title: checkingText)
+            menu.addItem(item)
+        } else {
+            menu.addItem(disabledItem(lastCheckedText(secondsAgo: checkedAgo)))
+        }
 
         // Always offered: portal detection can miss (e.g. the portal only
         // intercepts some traffic), and macOS's own assistant only checks on join.

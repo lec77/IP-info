@@ -110,18 +110,8 @@ final class DisplayFormattingTests: XCTestCase {
         XCTAssertEqual(stableForText(seconds: 3 * 3600 + 12 * 60), "Unchanged for 3h 12m")
     }
 
-    func testCheckingIndicator() {
-        XCTAssertEqual(spinnerFrame(0), "◐")
-        XCTAssertEqual(spinnerFrame(1), "◓")
-        XCTAssertEqual(spinnerFrame(4), "◐", "wraps")
-        XCTAssertEqual(spinnerFrame(-1), "◒", "negative ticks still land on a frame")
-        XCTAssertEqual(menuBarTitle(for: ok(full), checkingTick: 0), "◐ 🇺🇸 San Jose")
-        XCTAssertEqual(menuBarTitle(for: ok(full), paused: true, checkingTick: 2), "◑ ⏸ 🇺🇸 San Jose")
-        XCTAssertEqual(menuBarTitle(for: ExitIPModel(), checkingTick: 1), "◓ …")
-        XCTAssertEqual(menuBarTitle(for: ok(full), checkingTick: nil), "🇺🇸 San Jose")
-        XCTAssertEqual(checkingText(tick: 0), "Checking.")
-        XCTAssertEqual(checkingText(tick: 2), "Checking...")
-        XCTAssertEqual(checkingText(tick: 3), "Checking.")
+    func testCheckingText() {
+        XCTAssertEqual(checkingText, "Checking…")
     }
 
     func testLastCheckedText() {

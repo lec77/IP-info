@@ -14,26 +14,14 @@ func placeLabel(for info: IPInfo) -> String {
 
 /// Menu-bar title. Prefix legend: "⛔" the exit is not where you expect it,
 /// "⚠︎" degraded (offline, portal, partial geo) or a leak warning, "⏸" paused.
-/// While a check is running, `checkingTick` adds a spinner frame in front.
-public func menuBarTitle(for model: ExitIPModel, paused: Bool = false, checkingTick: Int? = nil) -> String {
+/// (A running check is shown by a spinner beside the title, not in it.)
+public func menuBarTitle(for model: ExitIPModel, paused: Bool = false) -> String {
     let base = baseTitle(for: model)
-    let titled = paused ? "⏸ \(base)" : base
-    guard let checkingTick else { return titled }
-    return "\(spinnerFrame(checkingTick)) \(titled)"
+    return paused ? "⏸ \(base)" : base
 }
 
-private let spinnerFrames: [Character] = Array("◐◓◑◒")
-
-/// One frame of the in-progress spinner; call with an increasing tick.
-public func spinnerFrame(_ tick: Int) -> String {
-    String(spinnerFrames[((tick % spinnerFrames.count) + spinnerFrames.count) % spinnerFrames.count])
-}
-
-/// "Checking.", "Checking..", "Checking..." — the "last checked" line's
-/// stand-in while a check is running.
-public func checkingText(tick: Int) -> String {
-    "Checking" + String(repeating: ".", count: ((tick % 3) + 3) % 3 + 1)
-}
+/// The "last checked" line's stand-in while a check is running.
+public let checkingText = "Checking…"
 
 private func baseTitle(for model: ExitIPModel) -> String {
     switch model.phase {

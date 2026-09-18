@@ -102,10 +102,22 @@ final class CaptivePortalTests: XCTestCase {
 
     // MARK: Menu text
 
-    func testMenuTitleNamesPortalHost() {
-        XCTAssertEqual(signInMenuTitle(portalHost: nil), "Open sign-in page…")
-        XCTAssertEqual(signInMenuTitle(portalHost: ""), "Open sign-in page…")
-        XCTAssertEqual(signInMenuTitle(portalHost: "10.93.115.1"), "Open sign-in page (10.93.115.1)…")
+    func testPortalStatusFollowsModelPhase() {
+        let signIn = PortalSignIn(url: URL(string: "http://10.93.115.1/login")!, isLocal: true)
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.captivePortal)), signIn: signIn), .signInRequired(host: "10.93.115.1"))
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.captivePortal)), signIn: nil), .signInRequired(host: nil))
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .ok), signIn: nil), .notDetected)
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.lookupFailed)), signIn: nil), .notDetected, "probe got through; only the lookup failed")
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .failed(.offline)), signIn: nil), .unknown)
+        XCTAssertEqual(portalStatus(for: ExitIPModel(phase: .initial), signIn: nil), .unknown)
+    }
+
+    func testMenuTitleSaysWhetherSignInIsNeeded() {
+        XCTAssertEqual(signInMenuTitle(.signInRequired(host: "10.93.115.1")), "⚠︎ Sign-in required — open portal page (10.93.115.1)…")
+        XCTAssertEqual(signInMenuTitle(.signInRequired(host: nil)), "⚠︎ Sign-in required — open portal page…")
+        XCTAssertEqual(signInMenuTitle(.signInRequired(host: "")), "⚠︎ Sign-in required — open portal page…")
+        XCTAssertEqual(signInMenuTitle(.notDetected), "Open sign-in page (no portal detected)…")
+        XCTAssertEqual(signInMenuTitle(.unknown), "Open sign-in page…")
     }
 
     func testTunnelHintOnlyForNonLocalPagesOnATunnel() {

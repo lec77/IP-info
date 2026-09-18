@@ -60,11 +60,34 @@ private func ipv4Octets(_ host: String) -> [Int]? {
     return octets.count == 4 ? octets : nil
 }
 
-/// Menu item title for opening the sign-in page. Names the portal's host when
-/// the probe caught its redirect, so the user can see where they're being sent.
-public func signInMenuTitle(portalHost: String?) -> String {
-    guard let portalHost, !portalHost.isEmpty else { return "Open sign-in page…" }
-    return "Open sign-in page (\(portalHost))…"
+/// What the last check said about a captive portal, for the sign-in item.
+public enum PortalStatus: Sendable, Equatable {
+    /// A portal intercepted the probe; `host` is where it redirected to, if known.
+    case signInRequired(host: String?)
+    /// The probe got through, so nothing is asking for a login.
+    case notDetected
+    /// Nothing to go on: no check yet, or no connectivity at all.
+    case unknown
+}
+
+public func portalStatus(for model: ExitIPModel, signIn: PortalSignIn?) -> PortalStatus {
+    switch model.phase {
+    case .failed(.captivePortal): return .signInRequired(host: signIn?.url.host)
+    case .ok, .failed(.lookupFailed): return .notDetected
+    case .initial, .failed(.offline): return .unknown
+    }
+}
+
+/// Menu item title for opening the sign-in page. The item is always offered
+/// (detection can miss), so the title carries whether a login is actually
+/// being asked for, and names the portal's host when the probe caught it.
+public func signInMenuTitle(_ status: PortalStatus) -> String {
+    switch status {
+    case .signInRequired(let host?) where !host.isEmpty: return "⚠︎ Sign-in required — open portal page (\(host))…"
+    case .signInRequired: return "⚠︎ Sign-in required — open portal page…"
+    case .notDetected: return "Open sign-in page (no portal detected)…"
+    case .unknown: return "Open sign-in page…"
+    }
 }
 
 /// A line to show under the sign-in item when the page probably won't load:

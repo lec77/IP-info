@@ -82,8 +82,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         // Always offered: portal detection can miss (e.g. the portal only
         // intercepts some traffic), and macOS's own assistant only checks on join.
-        let portalHost = state.portalSignIn.flatMap { $0.url.host }
-        menu.addItem(actionItem(signInMenuTitle(portalHost: portalHost), #selector(openSignIn), key: ""))
+        let status = portalStatus(for: state.model, signIn: state.portalSignIn)
+        menu.addItem(actionItem(signInMenuTitle(status), #selector(openSignIn), key: ""))
         if let signIn = state.portalSignIn, let hint = signInHint(signIn, viaTunnel: state.viaTunnel) {
             menu.addItem(disabledItem(hint))
         }

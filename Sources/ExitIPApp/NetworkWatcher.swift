@@ -26,7 +26,7 @@ final class NetworkWatcher {
                 self?.isOnline = online
                 self?.supportsIPv6 = supportsIPv6
                 self?.interface = online ? interface : nil
-                self?.physicalInterface = online ? physical : nil
+                self?.physicalInterface = physical
                 self?.onPathChange?(online)
             }
         }

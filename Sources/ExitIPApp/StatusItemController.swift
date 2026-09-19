@@ -14,6 +14,8 @@ struct MenuState {
     var checking = false
     /// Set only while a captive portal is detected.
     var portalSignIn: PortalSignIn?
+    var signInStatus: SignInDetection = .notChecked
+    var signInChecking = false
     var viaTunnel = false
     var physicalInterface: ActiveInterface?
     var directInfo: IPInfo?
@@ -40,7 +42,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     var onSetExpectedCountry: (String?) -> Void = { _ in }
     var onClearHistory: () -> Void = {}
     var onSetPollInterval: (TimeInterval) -> Void = { _ in }
-    var onOpenSignIn: (URL) -> Void = { _ in }
+    var onOpenSignIn: () -> Void = {}
+    var onCheckSignIn: () -> Void = {}
+    var onCopyDiagnostics: () -> Void = {}
+    var onExportDiagnostics: () -> Void = {}
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -137,13 +142,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(disabledItem(stableForText(seconds: Int(now.timeIntervalSince(last.date)))))
         }
         menu.addItem(actionItem("Refresh now", #selector(refresh), key: "r"))
-        if case .failed(.captivePortal) = state.model.phase {
+        if state.portalSignIn != nil {
             menu.addItem(actionItem("Open network sign-in…", #selector(openSignIn), key: ""))
         }
         menu.addItem(.separator())
         let historyItem = NSMenuItem(title: "History", action: nil, keyEquivalent: "")
         historyItem.submenu = buildHistoryMenu(now: now)
         menu.addItem(historyItem)
+        let networkSignIn = NSMenuItem(title: "Network sign-in", action: nil, keyEquivalent: "")
+        networkSignIn.submenu = buildSignInMenu()
+        menu.addItem(networkSignIn)
         let settings = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
         settings.submenu = buildSettingsMenu()
         menu.addItem(settings)
@@ -202,14 +210,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let login = actionItem("Launch at login", #selector(toggleLogin), key: "")
         login.state = state.loginEnabled ? .on : .off
         sub.addItem(login)
-        sub.addItem(.separator())
-        let status = portalStatus(for: state.model, signIn: state.portalSignIn)
-        let signIn = actionItem("Open network sign-in…", #selector(openSignIn), key: "")
-        signIn.toolTip = signInBadge(status)
-        sub.addItem(signIn)
-        if let portal = state.portalSignIn, let hint = signInHint(portal, viaTunnel: state.viaTunnel) {
-            sub.addItem(disabledItem(hint))
+        return sub
+    }
+
+    private func buildSignInMenu() -> NSMenu {
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+        sub.addItem(disabledItem(state.signInStatus.title))
+        let check = actionItem("Check sign-in now", #selector(checkSignIn), key: "")
+        check.isEnabled = !state.signInChecking
+        sub.addItem(check)
+        let open = actionItem("Open sign-in page…", #selector(openSignIn), key: "")
+        open.isEnabled = state.portalSignIn != nil
+        open.toolTip = state.portalSignIn.map { "Detected login server: \(diagnosticOrigin($0.url))" } ?? "Run a check to find the actual network login page."
+        sub.addItem(open)
+        if state.portalSignIn != nil && state.viaTunnel {
+            sub.addItem(disabledItem("Browser access may require pausing the VPN."))
         }
+        sub.addItem(.separator())
+        sub.addItem(actionItem("Copy diagnostics", #selector(copyDiagnostics), key: ""))
+        sub.addItem(actionItem("Export diagnostics…", #selector(exportDiagnostics), key: ""))
         return sub
     }
 
@@ -307,6 +327,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleNotifications() { onToggleNotifications() }
     @objc private func toggleLogin() { onToggleLogin() }
     @objc private func clearHistory() { onClearHistory() }
-    @objc private func openSignIn() { onOpenSignIn(state.portalSignIn?.url ?? Config.captivePortalSignInURL) }
+    @objc private func openSignIn() { onOpenSignIn() }
+    @objc private func checkSignIn() { onCheckSignIn() }
+    @objc private func copyDiagnostics() { onCopyDiagnostics() }
+    @objc private func exportDiagnostics() { onExportDiagnostics() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 }

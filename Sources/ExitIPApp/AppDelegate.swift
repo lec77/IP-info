@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Sign-in target from the last probe that saw a portal; shown while the
     /// model is in the portal state.
     private var portalSignIn: PortalSignIn?
+    private var signInStatus: SignInDetection = .notChecked
+    private var signInChecking = false
+    private let diagnostics = DiagnosticJournal()
     /// The interface actually carrying the default route, per the last check.
     /// `NWPathMonitor` doesn't list a proxy's TUN device, so this comes from
     /// `RouteProbe` and takes precedence over the watcher's answer.
@@ -48,7 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onSetExpectedCountry = { [weak self] code in self?.setExpectedCountry(code) }
         controller.onClearHistory = { [weak self] in self?.clearHistory() }
         controller.onSetPollInterval = { [weak self] seconds in self?.setPollInterval(seconds) }
-        controller.onOpenSignIn = { url in NSWorkspace.shared.open(url) }
+        controller.onOpenSignIn = { [weak self] in self?.openSignIn() }
+        controller.onCheckSignIn = { [weak self] in self?.checkSignIn() }
+        controller.onCopyDiagnostics = { [weak self] in self?.copyDiagnostics() }
+        controller.onExportDiagnostics = { [weak self] in self?.exportDiagnostics() }
         notifier.onOpenSignIn = { [weak self] in self?.openSignIn() }
 
         notifier.activate()
@@ -79,11 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handlePathChange(online: Bool) {
         networkGeneration += 1
+        portalSignIn = nil
+        signInStatus = .notChecked
         directExit = nil
         directLastGood = nil
         directCheckedDate = nil
         debounceWorkItem?.cancel()
         guard !paused else { return }
+        checkSignIn()
         guard online else {
             latencyMs = nil
             routeInterface = nil
@@ -99,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refresh() {
         guard !paused, !isRefreshing else { return }
+        checkSignIn()
         guard watcher.isOnline else { latencyMs = nil; apply(outcome: .failure(.offline)); return }
         isRefreshing = true
         rerender()
@@ -111,7 +121,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let verdict = result.verdict
             self.latencyMs = result.latencyMs
             self.latencyHistory = (self.latencyHistory + [result.latencyMs]).suffix(Config.latencyHistoryLimit)
-            self.portalSignIn = verdict == .captivePortal ? ExitIPCore.portalSignIn(redirect: result.portalRedirect) : nil
             let includeDNS = dnsCheckDue(lastCheck: self.lastDNSCheck, now: Date())
             var snapshot = (verdict == .reachable) ? await self.resolver.resolve(includeIPv6: includeIPv6, includeDNS: includeDNS) : nil
             let measuredDirect: IPInfo?
@@ -140,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if fresh.dnsResolver == nil, fresh.primary.ip != self.model.lastGoodIP?.ip { self.lastDNSCheck = nil }
                 snapshot = carryForwardResolver(fresh, from: self.model.lastGood)
             }
-            NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms directOnly=\(result.reachedOnlyDirectly) portal=\(result.portalRedirect?.absoluteString ?? "-") route=\(self.routeInterface?.name ?? "-") exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-") dns=\($0.dnsResolver?.ip ?? "-")" } ?? "none")")
+            NSLog("check: probe=\(verdict) latency=\(result.latencyMs.map(String.init) ?? "-")ms directOnly=\(result.reachedOnlyDirectly) portal=\(result.portalRedirect.map(diagnosticOrigin) ?? "-") route=\(self.routeInterface?.name ?? "-") exit=\(snapshot.map { "\($0.primary.ip) v6=\($0.ipv6?.ip ?? "-") dns=\($0.dnsResolver?.ip ?? "-")" } ?? "none")")
             self.isRefreshing = false
             self.rerender() // stop the spinner even when the result below is held back
             guard !self.paused else { return } // paused mid-flight: drop the result
@@ -199,7 +208,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latencyHistory: latencyHistory,
             lastCheckedDate: lastCheckedDate,
             checking: isRefreshing,
-            portalSignIn: model.phase == .failed(.captivePortal) ? portalSignIn : nil,
+            portalSignIn: portalSignIn,
+            signInStatus: signInStatus,
+            signInChecking: signInChecking,
             viaTunnel: viaTunnel,
             physicalInterface: watcher.physicalInterface.map { ActiveInterface(name: $0.name, kind: interfaceKind(name: $0.name, type: $0.type)) },
             directInfo: directLastGood,
@@ -231,7 +242,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openSignIn() {
-        NSWorkspace.shared.open(portalSignIn?.url ?? Config.captivePortalSignInURL)
+        guard let portalSignIn else { checkSignIn(); return }
+        NSWorkspace.shared.open(portalSignIn.url)
+    }
+
+    private func checkSignIn() {
+        guard !signInChecking else { return }
+        signInChecking = true
+        signInStatus = .checking
+        portalSignIn = nil
+        let generation = networkGeneration
+        let physical = watcher.physicalInterface
+        diagnostics.append(["Sign-in check started", "Network generation: \(generation)", "System path satisfied: \(watcher.isOnline)"])
+        rerender()
+        Task { @MainActor in
+            let result = await SignInDiagnostics.check(interface: physical)
+            diagnostics.append(["Network generation: \(generation)", "Result: \(result.status.title)"] + result.lines)
+            signInChecking = false
+            guard generation == networkGeneration else {
+                diagnostics.append(["Discarded sign-in result after a network change."])
+                if !paused { checkSignIn() } else { rerender() }
+                return
+            }
+            signInStatus = result.status
+            portalSignIn = result.url.map { PortalSignIn(url: $0, isLocal: isLocalHost($0.host ?? "")) }
+            rerender()
+        }
+    }
+
+    private func copyDiagnostics() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(diagnostics.text, forType: .string)
+    }
+
+    private func exportDiagnostics() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "IP-info-diagnostics.txt"
+        panel.title = "Export diagnostics"
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            do { try self.diagnostics.text.write(to: url, atomically: true, encoding: .utf8) }
+            catch { NSAlert(error: error).runModal() }
+        }
     }
 
     private func clearHistory() {

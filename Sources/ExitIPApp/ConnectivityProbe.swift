@@ -86,13 +86,13 @@ final class ConnectivityProbe: NSObject, URLSessionTaskDelegate {
 enum BoundHTTPProbe {
     private static let maxHeadBytes = 64 * 1024
 
-    static func fetchHead(url: URL, interface: NWInterface?, timeout: TimeInterval) async -> HTTPResponseHead? {
+    static func fetchHead(url: URL, interface: NWInterface?, timeout: TimeInterval, connectHost: String? = nil) async -> HTTPResponseHead? {
         guard let host = url.host, !host.isEmpty else { return nil }
         let port = NWEndpoint.Port(rawValue: UInt16(url.port ?? 80)) ?? 80
         let parameters = NWParameters.tcp
         parameters.requiredInterface = interface
         parameters.preferNoProxies = true
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: port, using: parameters)
+        let connection = NWConnection(host: NWEndpoint.Host(connectHost ?? host), port: port, using: parameters)
         let queue = DispatchQueue(label: "com.lec77.ipinfo.bound-probe")
         let finish = OnceContinuation<HTTPResponseHead?>()
 
@@ -141,7 +141,7 @@ enum BoundHTTPProbe {
 
 /// Resumes a continuation at most once, whichever of several callbacks
 /// (response, failure, timeout) gets there first, then runs the cleanup.
-private final class OnceContinuation<T: Sendable>: @unchecked Sendable {
+final class OnceContinuation<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Never>?
     private var cleanup: (() -> Void)?

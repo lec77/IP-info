@@ -12,7 +12,7 @@ A tiny native macOS **menu bar app** that shows your current **exit (public) IP*
 - **IPv4 + IPv6.** Both exits are looked up (hosts without IPv6 just show IPv4). If IPv6 exits in a different country than IPv4 — or, on a tunnel, via a different ISP — that's the classic IPv6 leak and it's flagged.
 - **DNS leak detection.** Every 5 minutes a poll asks an authoritative server which resolver looked up a one-off name (`DNS: 🇺🇸 Google LLC` in the dropdown); a resolver in a different country than the exit is flagged.
 - **History.** *History ▸* lists recent exit changes (`14:05  🇺🇸 → 🇩🇪  5.6.7.8`, click to copy) and the dropdown shows "Unchanged for 3h 12m". Persisted, so a change that happened while the app wasn't running is still recorded at launch.
-- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the *Open network sign-in…* action is available under *Settings* and also in the main menu when sign-in is required; it opens the portal's login URL), `⚠︎ tunnel down` when the physical network works but nothing gets through the VPN/proxy tunnel, and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown with a sparkline of the last 12 checks.
+- **Connection states** with hysteresis (a single blip is re-checked before it's reported): `⚠︎ offline`, `⚠︎ captive portal` (the *Network sign-in* submenu independently checks the physical network and enables *Open sign-in page…* only after discovering a login URL), `⚠︎ tunnel down` when the physical network works but nothing gets through the VPN/proxy tunnel, and `⚠︎` + last known place when the lookup services are unreachable. Latency to the probe endpoint is shown in the dropdown with a sparkline of the last 12 checks.
 - **Notifications** on exit change, connectivity loss/restore, captive portal (with an *Open sign-in page* button), tunnel down, and every warning above (toggle in the menu; the setting persists).
 - **Pause monitoring** (`⏸` in the title) when you don't want the traffic — e.g. on a metered connection.
 - **Launch at login** toggle (via `SMAppService`).
@@ -55,11 +55,19 @@ Settings                   ▸
 Quit IP-info               ⌘Q
 ```
 
+## Offline sign-in diagnostics
+
+Connect to the Wi-Fi that requires sign-in, then choose **Network sign-in ▸ Check sign-in now**. This works independently of the normal Internet check, including when that check reports offline or monitoring is paused. Network changes also trigger a check while monitoring is active.
+
+The detector sends DNS queries to the physical interface's DHCP-provided resolver and pins HTTP probes to the returned addresses on that interface. It does not substitute public DNS or fall back to the VPN route. A redirect enables **Open sign-in page…**; an unexpected page without a redirect is marked as a possible portal. Failures remain unknown, rather than claiming that sign-in is unnecessary. Browser access to the discovered page may still require a VPN routing exception or temporarily pausing the VPN.
+
+Wait for the check to finish (usually within 20 seconds), then choose **Copy diagnostics** or **Export diagnostics…** in the same submenu. You can switch back to a working network first: the most recent 20 diagnostic entries survive network changes and app restarts. Records are stored locally in `~/Library/Application Support/IP-info/sign-in-diagnostics.json`. They include interface names, route information, DHCP DNS, local IP addresses, response status codes and login origins, but exclude passwords, form contents, cookies and URL paths/queries. Full login URLs remain in memory only and are cleared on network changes.
+
 ## Architecture
 
 - `Sources/ExitIPCore` — pure, fully unit-tested logic, Swift 6 language mode: data model, provider JSON parsing, the address/geo resolver with its per-address geo cache, connectivity verdicts (reachable / captive portal / offline) + hysteresis, the state + notification reducer, exit-warning assessment (expected country, IPv6 mismatch, tunnel-but-direct-IP), change history, interface classification, and display formatting.
 - `Sources/ExitIPApp` — a thin AppKit shell: status item + menu, network watcher (`NWPathMonitor`, incl. which interface carries the default route), connectivity probe (HTTPS first; plain-HTTP fallback *bound to the physical interface* — bypassing any VPN/proxy TUN and its DNS hijack — to distinguish a captive portal from being offline and to catch the portal's redirect URL), default-route probe (finds a proxy's TUN device that `NWPathMonitor` doesn't list), fetcher wiring, notifier, UserDefaults-backed settings, login item.
-- `Tests/ExitIPCoreTests` — 176 unit tests covering the core logic.
+- `Tests/ExitIPCoreTests` — 183 unit tests covering the core logic.
 
 Persisted state lives in UserDefaults under `com.lec77.ipinfo` (notifications toggle, expected country, poll interval, history).
 
